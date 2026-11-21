@@ -1,12 +1,13 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils import timezone
 from django.db.models import Count, Q
 from .models import (
     User, Department, ComplaintCategory, Complaint,
     ComplaintEvidence, ComplaintTimeline, Notification, CitizenFeedback, Subscription,
-    UserRole, ComplaintStatus
+    UserRole, ComplaintStatus, EmailOTP
 )
 from .serializers import (
     UserSerializer, RegisterSerializer, DepartmentSerializer,
@@ -25,6 +26,7 @@ from .notifications import (
     send_notification_idempotent, notify_resolution_awaiting_confirmation,
     notify_resolution_confirmed, notify_resolution_disputed
 )
+from .email_service import send_otp_email, verify_otp_code, notify_user_via_email
 
 class RegisterView(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
@@ -128,6 +130,14 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         if complaint.department:
             notify_department_assigned(complaint)
 
+        # In-app + SMTP Email notification
+        notify_user_via_email(
+            user=user,
+            title="Complaint Registered Successfully",
+            message=f"Your complaint ticket {complaint.tracking_id} has been logged.",
+            complaint=complaint
+        )
+
         # Check duplicate
         duplicates = check_possible_duplicates(complaint, Complaint.objects.all())
         if duplicates:
@@ -177,6 +187,14 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         if new_status == ComplaintStatus.RESOLVED:
             notify_resolution_awaiting_confirmation(complaint)
 
+        # In-app + SMTP Email notification
+        notify_user_via_email(
+            user=complaint.citizen,
+            title=f"Complaint Update: {complaint.tracking_id}",
+            message=f"Status has been updated to '{complaint.get_status_display()}'. Notes: {notes}",
+            complaint=complaint
+        )
+
         return Response(ComplaintSerializer(complaint).data)
 
     @action(detail=True, methods=['get'], permission_classes=[permissions.IsAdminUser])
@@ -216,6 +234,14 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
             # Notify Staff & Citizen (Safe and Idempotent - Task 13)
             notify_staff_assigned(complaint, staff_user)
+
+            # Notify Staff (in-app + SMTP Email)
+            notify_user_via_email(
+                user=staff_user,
+                title="New Task Assigned",
+                message=f"You have been assigned to handle complaint {complaint.tracking_id}.",
+                complaint=complaint
+            )
 
             return Response(ComplaintSerializer(complaint).data)
         except User.DoesNotExist:
@@ -461,6 +487,87 @@ class EvidenceUploadView(viewsets.ModelViewSet):
         elif evidence.file:
             evidence.ai_analysis_description = f"[{evidence.get_file_type_display()} Attached] Standard evidence record."
             evidence.save(update_fields=['ai_analysis_description'])
+
+class AuthOTPViewSet(viewsets.GenericViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['post'])
+    def send_otp(self, request):
+        email = request.data.get('email', '').strip().lower()
+        purpose = request.data.get('purpose', 'login')
+
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # For login OTP or reset, verify that user exists
+        if purpose in ['login', 'reset_password']:
+            user_exists = User.objects.filter(email__iexact=email).exists()
+            if not user_exists:
+                return Response(
+                    {"error": "No account found with this email address. Please sign up first."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        result = send_otp_email(email, purpose)
+        if result.get("success"):
+            return Response({"message": f"Verification code sent to {email}"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": result.get("error", "Failed to send OTP")}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def verify_login_otp(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp', '').strip()
+
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not verify_otp_code(email, otp, purpose='login'):
+            return Response({"error": "Invalid or expired OTP. Please check your code or request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "User account not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def verify_signup_otp(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp', '').strip()
+
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not verify_otp_code(email, otp, purpose='signup'):
+            return Response({"error": "Invalid or expired OTP code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"verified": True, "message": "Email verified successfully."}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def reset_password_with_otp(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp', '').strip()
+        new_password = request.data.get('new_password', '')
+
+        if not email or not otp or not new_password:
+            return Response({"error": "Email, OTP, and new password are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not verify_otp_code(email, otp, purpose='reset_password'):
+            return Response({"error": "Invalid or expired OTP code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({"error": "User account not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({"message": "Password reset successfully. You can now log in."}, status=status.HTTP_200_OK)
 
 class AnalyticsViewSet(viewsets.GenericViewSet):
     """

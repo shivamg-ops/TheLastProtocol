@@ -2,19 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Mic, LogOut, LayoutDashboard, Bell, Check, Clock, Bot } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
-import { api } from "@/lib/api";
+import { Mic, LogOut, LayoutDashboard, Bot } from "lucide-react";
+import { useEffect, useState } from "react";
+import NotificationBell from "./NotificationBell";
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifMenu, setShowNotifMenu] = useState<boolean>(false);
-  const [loadingNotifs, setLoadingNotifs] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -26,75 +21,6 @@ export default function Navbar() {
       // ignore
     }
   }, []);
-
-  useEffect(() => {
-    if (user) {
-      fetchUnreadCount();
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [user]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowNotifMenu(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const fetchUnreadCount = async () => {
-    try {
-      const res = await api.get("/notifications/unread_count/");
-      setUnreadCount(res.data.unread_count || 0);
-    } catch {
-      // ignore error
-    }
-  };
-
-  const fetchNotifications = async () => {
-    setLoadingNotifs(true);
-    try {
-      const res = await api.get("/notifications/");
-      setNotifications(res.data.slice(0, 10)); // Top 10 notifications
-    } catch {
-      // ignore error
-    } finally {
-      setLoadingNotifs(false);
-    }
-  };
-
-  const toggleNotifMenu = () => {
-    if (!showNotifMenu) {
-      fetchNotifications();
-    }
-    setShowNotifMenu(!showNotifMenu);
-  };
-
-  const handleMarkRead = async (id: number) => {
-    try {
-      await api.post(`/notifications/${id}/mark_read/`);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await api.post("/notifications/mark_all_read/");
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-    } catch {
-      // ignore
-    }
-  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -191,86 +117,7 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-2.5">
-                {/* Notification Bell Dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={toggleNotifMenu}
-                    className="relative p-2 text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition"
-                    title="Notifications"
-                    aria-label="In-app notifications"
-                  >
-                    <Bell className="w-4 h-4" />
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#A94D37] text-white text-[10px] font-bold rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center border-2 border-[#17191D]">
-                        {unreadCount > 9 ? "9+" : unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showNotifMenu && (
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[#1f2228] border border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden text-gray-200">
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-[#17191D]">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-white">Notifications</span>
-                          {unreadCount > 0 && (
-                            <span className="bg-[#A94D37]/30 text-[#f0856d] text-[10px] font-bold px-2 py-0.5 rounded-full">
-                              {unreadCount} unread
-                            </span>
-                          )}
-                        </div>
-                        {unreadCount > 0 && (
-                          <button
-                            onClick={handleMarkAllRead}
-                            className="text-[11px] text-gray-400 hover:text-white flex items-center gap-1 transition"
-                          >
-                            <Check className="w-3 h-3" /> Mark all read
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="max-h-80 overflow-y-auto divide-y divide-gray-800/60">
-                        {loadingNotifs ? (
-                          <div className="p-4 text-center text-xs text-gray-400">Loading notifications...</div>
-                        ) : notifications.length === 0 ? (
-                          <div className="p-6 text-center text-xs text-gray-400">No notifications yet.</div>
-                        ) : (
-                          notifications.map((notif) => (
-                            <div
-                              key={notif.id}
-                              className={`p-3.5 transition hover:bg-gray-800/50 ${
-                                !notif.is_read ? "bg-gray-800/30 border-l-2 border-[#A94D37]" : ""
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className={`text-xs font-semibold ${!notif.is_read ? "text-white" : "text-gray-300"}`}>
-                                  {notif.title}
-                                </h4>
-                                {!notif.is_read && (
-                                  <button
-                                    onClick={() => handleMarkRead(notif.id)}
-                                    className="text-[10px] text-gray-400 hover:text-white p-1"
-                                    title="Mark as read"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-                                {notif.message}
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-2 text-[10px] text-gray-500">
-                                <Clock className="w-3 h-3" />
-                                <span>{new Date(notif.created_at).toLocaleString()}</span>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
+                <NotificationBell />
                 <span className="text-[11px] bg-gray-800 border border-gray-700 px-2.5 py-1 rounded-full text-gray-300 font-medium">
                   {user.username}{" "}
                   <strong className="text-[#A94D37] capitalize font-semibold">

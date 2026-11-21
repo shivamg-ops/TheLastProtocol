@@ -5,11 +5,12 @@ from .views import (
     RegisterView, UserProfileView, DepartmentViewSet,
     ComplaintCategoryViewSet, ComplaintViewSet, AIAnalysisView,
     EvidenceUploadView, AnalyticsViewSet, NotificationViewSet,
-    CivicAssistantViewSet
+    CivicAssistantViewSet, AuthOTPViewSet
 )
 
 router = DefaultRouter()
 router.register(r'auth/register', RegisterView, basename='register')
+router.register(r'auth/otp', AuthOTPViewSet, basename='auth-otp')
 router.register(r'departments', DepartmentViewSet, basename='departments')
 router.register(r'categories', ComplaintCategoryViewSet, basename='categories')
 router.register(r'complaints', ComplaintViewSet, basename='complaints')
