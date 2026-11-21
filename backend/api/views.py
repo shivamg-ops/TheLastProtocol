@@ -19,6 +19,12 @@ from .ai_service import (
     detect_duplicate_evidence,
     check_possible_duplicates
 )
+from .notifications import (
+    notify_complaint_submitted, notify_department_assigned,
+    notify_staff_assigned, notify_status_update, notify_escalation,
+    send_notification_idempotent, notify_resolution_awaiting_confirmation,
+    notify_resolution_confirmed, notify_resolution_disputed
+)
 
 class RegisterView(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
@@ -101,6 +107,13 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
         complaint = serializer.save(citizen=user, department=dept)
 
+        # Set timezone-aware SLA target date from department SLA configuration
+        from .sla_monitor import SLAMonitor
+        sla_deadline = SLAMonitor.calculate_sla_deadline(complaint)
+        if sla_deadline:
+            complaint.sla_target_date = sla_deadline
+            complaint.save(update_fields=['sla_target_date'])
+
         # Log timeline
         ComplaintTimeline.objects.create(
             complaint=complaint,
@@ -110,13 +123,10 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             to_status=complaint.status
         )
 
-        # Notification to citizen
-        Notification.objects.create(
-            user=user,
-            title="Complaint Registered Successfully",
-            message=f"Your complaint ticket {complaint.tracking_id} has been logged.",
-            complaint=complaint
-        )
+        # Notification to citizen (Safe and Idempotent - Task 13)
+        notify_complaint_submitted(complaint)
+        if complaint.department:
+            notify_department_assigned(complaint)
 
         # Check duplicate
         duplicates = check_possible_duplicates(complaint, Complaint.objects.all())
@@ -148,6 +158,8 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             complaint.resolution_notes = notes
         if new_status == ComplaintStatus.RESOLVED:
             complaint.resolution_date = timezone.now()
+            # Task 17: Staff marking resolved triggers citizen confirmation awaiting state
+            complaint.resolution_verification_status = 'pending_citizen_confirmation'
         complaint.save()
 
         # Record timeline
@@ -160,15 +172,26 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             to_status=new_status
         )
 
-        # Citizen notification
-        Notification.objects.create(
-            user=complaint.citizen,
-            title=f"Complaint Update: {complaint.tracking_id}",
-            message=f"Status has been updated to '{complaint.get_status_display()}'. Notes: {notes}",
-            complaint=complaint
-        )
+        # Citizen notification (Safe and Idempotent - Task 13 & 17)
+        notify_status_update(complaint, old_status, new_status, public_notes=notes)
+        if new_status == ComplaintStatus.RESOLVED:
+            notify_resolution_awaiting_confirmation(complaint)
 
         return Response(ComplaintSerializer(complaint).data)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAdminUser])
+    def recommend_staff(self, request, pk=None):
+        """
+        Task 18: Smart Field Staff Recommendation
+        - Recommends optimal staff using department match, verified skills, active workload,
+          and geographic proximity.
+        - Human-in-the-loop guarantee: This endpoint NEVER automatically commits staff assignment.
+        - Admin approval required.
+        """
+        complaint = self.get_object()
+        from .staff_assignment import StaffAssignmentService
+        recommendation = StaffAssignmentService.recommend_staff_for_complaint(complaint)
+        return Response(recommendation)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def assign_staff(self, request, pk=None):
@@ -191,13 +214,8 @@ class ComplaintViewSet(viewsets.ModelViewSet):
                 details="Staff member assigned for resolution."
             )
 
-            # Notify Staff
-            Notification.objects.create(
-                user=staff_user,
-                title="New Task Assigned",
-                message=f"You have been assigned to handle complaint {complaint.tracking_id}.",
-                complaint=complaint
-            )
+            # Notify Staff & Citizen (Safe and Idempotent - Task 13)
+            notify_staff_assigned(complaint, staff_user)
 
             return Response(ComplaintSerializer(complaint).data)
         except User.DoesNotExist:
@@ -205,18 +223,42 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def submit_feedback(self, request, pk=None):
-        complaint = self.get_object()
+        """
+        Task 17: Citizen Trust, Feedback & Resolution Verification
+        - Allows the reporting citizen to confirm or dispute resolution.
+        - Records satisfaction rating (1-5), optional comments, and dispute reasons.
+        - Automatically marks complaint status as VERIFIED upon confirmation.
+        - Flags resolution_verification_status as 'citizen_confirmed' or 'citizen_disputed'.
+        - Prevents duplicate feedback submissions.
+        """
+        # Look up complaint across all complaints to ensure proper 403 authorization check
+        try:
+            complaint = Complaint.objects.get(pk=pk)
+        except Complaint.DoesNotExist:
+            return Response({"error": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Only the citizen who reported the complaint can submit feedback
+        # Only the citizen who reported the complaint can submit feedback (or admin)
         if complaint.citizen != request.user and request.user.role != UserRole.ADMIN:
-            return Response({"error": "Forbidden: Only the reporting citizen can submit feedback for this complaint."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Forbidden: Only the reporting citizen can confirm, dispute or rate resolution."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         if complaint.status != ComplaintStatus.RESOLVED and complaint.status != ComplaintStatus.VERIFIED:
-            return Response({"error": "Feedback can only be submitted for resolved complaints."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Resolution feedback can only be submitted for complaints marked as resolved."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         rating = request.data.get('rating')
         feedback_text = request.data.get('feedback_text', '')
-        satisfaction = request.data.get('resolution_satisfaction', True)
+        satisfaction_raw = request.data.get('resolution_satisfaction', True)
+        is_disputed_raw = request.data.get('is_disputed', False)
+        dispute_reason = request.data.get('dispute_reason', '')
+
+        # Safe boolean parsing handling both JSON and form-urlencoded strings
+        is_disputed = is_disputed_raw is True or str(is_disputed_raw).lower() in ['true', '1']
+        satisfaction = (satisfaction_raw is True or str(satisfaction_raw).lower() in ['true', '1']) and not is_disputed
 
         if not rating or not str(rating).isdigit() or int(rating) < 1 or int(rating) > 5:
             return Response({"error": "A rating between 1 and 5 is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -226,29 +268,91 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             complaint=complaint,
             defaults={
                 'rating': int(rating),
-                'feedback_text': feedback_text,
-                'resolution_satisfaction': bool(satisfaction)
+                'feedback_text': feedback_text.strip(),
+                'resolution_satisfaction': bool(satisfaction) and not bool(is_disputed),
+                'is_disputed': bool(is_disputed),
+                'dispute_reason': dispute_reason.strip() if is_disputed else ""
             }
         )
 
         if not created:
             return Response({"error": "Feedback has already been submitted for this complaint."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Mark complaint status as verified by citizen
-        complaint.status = ComplaintStatus.VERIFIED
-        complaint.save(update_fields=['status'])
-
-        # Audit timeline
-        ComplaintTimeline.objects.create(
-            complaint=complaint,
-            performed_by=request.user,
-            action="Resolution Verified & Feedback Submitted",
-            details=f"Citizen rated resolution {rating}/5 stars. Notes: {feedback_text}",
-            from_status=ComplaintStatus.RESOLVED,
-            to_status=ComplaintStatus.VERIFIED
-        )
+        if is_disputed:
+            complaint.resolution_verification_status = 'citizen_disputed'
+            # Disputed complaint timeline
+            ComplaintTimeline.objects.create(
+                complaint=complaint,
+                performed_by=request.user,
+                action="Resolution Disputed by Citizen",
+                details=f"Citizen disputed resolution with rating {rating}/5. Reason: {dispute_reason or feedback_text}",
+                from_status=complaint.status,
+                to_status=complaint.status
+            )
+            complaint.save(update_fields=['resolution_verification_status'])
+            # Notify citizen and assigned staff / admin review
+            notify_resolution_disputed(complaint, reason=dispute_reason)
+        else:
+            complaint.status = ComplaintStatus.VERIFIED
+            complaint.resolution_verification_status = 'citizen_confirmed'
+            complaint.save(update_fields=['status', 'resolution_verification_status'])
+            # Confirmed complaint timeline
+            ComplaintTimeline.objects.create(
+                complaint=complaint,
+                performed_by=request.user,
+                action="Resolution Confirmed & Feedback Submitted",
+                details=f"Citizen confirmed resolution and rated {rating}/5 stars. Notes: {feedback_text}",
+                from_status=ComplaintStatus.RESOLVED,
+                to_status=ComplaintStatus.VERIFIED
+            )
+            notify_resolution_confirmed(complaint)
 
         return Response(CitizenFeedbackSerializer(feedback).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def admin_review_dispute(self, request, pk=None):
+        """
+        Task 17: Administrative review of a disputed complaint resolution.
+        Admin can choose to:
+        - Reopen ticket for staff work (sets status back to IN_PROGRESS)
+        - Uphold resolution with supervisor confirmation (sets status to VERIFIED)
+        """
+        complaint = self.get_object()
+        action_decision = request.data.get('decision')  # 'reopen' | 'uphold'
+        review_notes = request.data.get('notes', '')
+
+        if action_decision not in ['reopen', 'uphold']:
+            return Response({"error": "Decision must be 'reopen' or 'uphold'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_status = complaint.status
+        if action_decision == 'reopen':
+            complaint.status = ComplaintStatus.IN_PROGRESS
+            complaint.resolution_verification_status = 'admin_review_required'
+            complaint.save(update_fields=['status', 'resolution_verification_status'])
+            ComplaintTimeline.objects.create(
+                complaint=complaint,
+                performed_by=request.user,
+                action="Admin Reopened Disputed Grievance",
+                details=f"Administrator review reopened ticket for further field work. Notes: {review_notes}",
+                from_status=old_status,
+                to_status=ComplaintStatus.IN_PROGRESS
+            )
+            notify_status_update(complaint, old_status, ComplaintStatus.IN_PROGRESS, public_notes=review_notes)
+        else:
+            complaint.status = ComplaintStatus.VERIFIED
+            complaint.resolution_verification_status = 'citizen_confirmed'
+            complaint.save(update_fields=['status', 'resolution_verification_status'])
+            ComplaintTimeline.objects.create(
+                complaint=complaint,
+                performed_by=request.user,
+                action="Admin Verified & Closed Resolution",
+                details=f"Supervisor reviewed and confirmed resolution. Notes: {review_notes}",
+                from_status=old_status,
+                to_status=ComplaintStatus.VERIFIED
+            )
+            notify_status_update(complaint, old_status, ComplaintStatus.VERIFIED, public_notes=review_notes)
+
+        return Response(ComplaintSerializer(complaint).data)
 
 class AIAnalysisView(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
@@ -304,44 +408,46 @@ class EvidenceUploadView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         evidence = serializer.save(uploaded_by=self.request.user)
-        # Auto-run AI image description and duplicate detection if it is an image
+        # Auto-run AI image description, duplicate detection and evidence trust verification
         if evidence.file_type == 'image' and evidence.file:
-            # 1. Duplicate Image Analysis (exact SHA-256 and perceptual pHash)
-            dup_res = detect_duplicate_evidence(
+            from .evidence_verifier import EvidenceVerifier
+            complaint_text = evidence.complaint.description if evidence.complaint else ""
+            complaint_category = evidence.complaint.category.name if (evidence.complaint and evidence.complaint.category) else ""
+
+            # Unified Multi-Signal Verification
+            v_res = EvidenceVerifier.verify_evidence(
                 image_file_path=evidence.file.path,
+                complaint_text=complaint_text,
+                complaint_category=complaint_category,
                 current_evidence_id=evidence.id,
                 current_complaint_id=evidence.complaint_id if evidence.complaint else None
             )
-            evidence.sha256_hash = dup_res.get("sha256_hash")
-            evidence.phash = dup_res.get("phash")
-            evidence.is_duplicate = dup_res.get("is_duplicate", False)
-            evidence.duplicate_type = dup_res.get("duplicate_type", "none")
-            evidence.similarity_score = dup_res.get("similarity_score", 0.0)
-            evidence.review_required = dup_res.get("review_required", False)
-            
-            matched_id = dup_res.get("matched_evidence_id")
+
+            dup_info = v_res.get("duplicate_result", {})
+            evidence.is_duplicate = dup_info.get("is_duplicate", False)
+            evidence.duplicate_type = dup_info.get("duplicate_type", "none")
+            evidence.similarity_score = dup_info.get("similarity_score", 0.0)
+            evidence.review_required = v_res.get("review_required", False)
+
+            # Hashes from duplicate detector
+            from .ai_service import compute_image_hashes
+            hashes = compute_image_hashes(evidence.file.path)
+            evidence.sha256_hash = hashes.get("sha256")
+            evidence.phash = hashes.get("phash")
+
+            matched_id = dup_info.get("matched_evidence_id")
             if matched_id:
                 try:
                     evidence.matched_evidence = ComplaintEvidence.objects.get(id=matched_id)
-                    # Flag parent complaint for staff awareness without rejecting it
                     if evidence.complaint:
                         evidence.complaint.ai_duplicate_suspect = True
                         evidence.complaint.save(update_fields=['ai_duplicate_suspect'])
                 except ComplaintEvidence.DoesNotExist:
                     pass
 
-            # 2. Visual Quality & Multimodal Verification
-            complaint_text = evidence.complaint.description if evidence.complaint else ""
-            complaint_category = evidence.complaint.category.name if (evidence.complaint and evidence.complaint.category) else ""
-            res = analyze_image_evidence(
-                image_file_path=evidence.file.path,
-                complaint_text=complaint_text,
-                complaint_category=complaint_category
-            )
-            analysis_text = res.get('analysis', '')
-            if evidence.is_duplicate:
-                analysis_text += f" [Duplicate Notice: {dup_res['summary']}]"
-            evidence.ai_analysis_description = analysis_text
+            evidence.ai_analysis_description = f"{v_res['summary']} Details: {'; '.join(v_res['verification_reasons'][:2])}"
+            if v_res.get("review_reasons"):
+                evidence.ai_analysis_description += f" [Review Notes: {'; '.join(v_res['review_reasons'][:2])}]"
 
             evidence.save(update_fields=[
                 'sha256_hash', 'phash', 'is_duplicate', 'duplicate_type',
@@ -357,24 +463,295 @@ class EvidenceUploadView(viewsets.ModelViewSet):
             evidence.save(update_fields=['ai_analysis_description'])
 
 class AnalyticsViewSet(viewsets.GenericViewSet):
+    """
+    Task 14: Data-Driven Analytics & AI Insights for JanSahayak
+    - Permission: Admin and Authorized Municipal Staff only
+    - Filters: date_from, date_to, category, department, status
+    - Metrics: total, pending, in_progress, resolved, overdue, SLA compliance %,
+               average resolution time, category breakdown, department performance,
+               volume trend
+    - AI Insights: Optional explanatory insights via Gemini with deterministic fallback
+    """
     permission_classes = [permissions.IsAuthenticated]
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        # BOLA / RBAC: Sensitive administrative municipal analytics only accessible to Admin & Staff
+        if request.user.role not in [UserRole.ADMIN, UserRole.STAFF] and not request.user.is_staff:
+            self.permission_denied(
+                request,
+                message="Forbidden: Municipal analytics dashboard requires administrative or staff clearance."
+            )
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        total = Complaint.objects.count()
-        resolved = Complaint.objects.filter(status=ComplaintStatus.RESOLVED).count()
-        in_progress = Complaint.objects.filter(status=ComplaintStatus.IN_PROGRESS).count()
-        pending = Complaint.objects.filter(status__in=[ComplaintStatus.SUBMITTED, ComplaintStatus.ACKNOWLEDGED, ComplaintStatus.ASSIGNED]).count()
+        from .analytics_insights import (
+            calculate_analytics_metrics,
+            generate_ai_insights,
+            parse_iso_datetime
+        )
 
-        category_distribution = Complaint.objects.values('category__name').annotate(count=Count('id'))
-        status_distribution = Complaint.objects.values('status').annotate(count=Count('id'))
+        # Parse query filters
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        category_id_str = request.query_params.get('category')
+        department_id_str = request.query_params.get('department')
+        status_str = request.query_params.get('status')
+        include_ai = request.query_params.get('include_ai', 'true').lower() in ['true', '1']
 
-        return Response({
-            "total_complaints": total,
-            "resolved_complaints": resolved,
-            "in_progress_complaints": in_progress,
-            "pending_complaints": pending,
-            "resolution_rate": round((resolved / total * 100), 1) if total > 0 else 0,
-            "category_breakdown": category_distribution,
-            "status_breakdown": status_distribution
-        })
+        date_from = parse_iso_datetime(date_from_str)
+        date_to = parse_iso_datetime(date_to_str)
+        category_id = int(category_id_str) if category_id_str and category_id_str.isdigit() else None
+        department_id = int(department_id_str) if department_id_str and department_id_str.isdigit() else None
+        status_filter = status_str.strip().lower() if status_str and status_str.strip() else None
+
+        # Calculate database metrics
+        metrics = calculate_analytics_metrics(
+            date_from=date_from,
+            date_to=date_to,
+            category_id=category_id,
+            department_id=department_id,
+            status_filter=status_filter
+        )
+
+        # Optional AI/Deterministic Insights
+        insights_data = generate_ai_insights(metrics) if include_ai else None
+
+        # Flatten response maintaining backward-compatibility with older frontend keys
+        summary = metrics["summary"]
+        response_data = {
+            # Backward-compatible summary fields
+            "total_complaints": summary["total_complaints"],
+            "pending_complaints": summary["pending_complaints"],
+            "in_progress_complaints": summary["in_progress_complaints"],
+            "resolved_complaints": summary["resolved_complaints"],
+            "overdue_complaints_count": summary["overdue_complaints"],
+            "approaching_deadline_count": summary["approaching_sla_complaints"],
+            "resolution_rate": summary["resolution_rate"],
+            "category_breakdown": metrics["category_breakdown"],
+            "status_breakdown": metrics["status_breakdown"],
+            # Extended Task 14 & 17 metrics
+            "sla_compliance_rate": summary["sla_compliance_rate"],
+            "avg_resolution_hours": summary["avg_resolution_hours"],
+            "escalated_complaints_count": summary["escalated_complaints"],
+            "pending_citizen_confirmation_count": summary.get("pending_citizen_confirmation_count", 0),
+            "citizen_confirmed_count": summary.get("citizen_confirmed_count", 0),
+            "citizen_disputed_count": summary.get("citizen_disputed_count", 0),
+            "admin_review_count": summary.get("admin_review_count", 0),
+            "avg_citizen_satisfaction": summary.get("avg_citizen_satisfaction", 0.0),
+            "total_feedback_count": summary.get("total_feedback_count", 0),
+            "department_performance": metrics["department_performance"],
+            "volume_trend": metrics["volume_trend"],
+            "filters_applied": metrics["filters_applied"],
+            "ai_insights": insights_data
+        }
+
+        return Response(response_data)
+
+    @action(detail=False, methods=['get'])
+    def location_intelligence(self, request):
+        """
+        Task 15: Smart Location Intelligence & Hotspot Mapping Endpoint
+        - Access: Admin & Staff only (enforced by check_permissions)
+        - Uses actual GPS coordinates only (-90 <= lat <= 90, -180 <= lng <= 180)
+        - Groups nearby complaints into explainable cluster hotspots
+        - Excludes citizen PII
+        - Supports filters: date_from, date_to, category, department, status, radius_km
+        """
+        from .location_intelligence import calculate_location_intelligence
+        from .analytics_insights import parse_iso_datetime
+
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        category_id_str = request.query_params.get('category')
+        department_id_str = request.query_params.get('department')
+        status_str = request.query_params.get('status')
+        radius_str = request.query_params.get('radius_km', '0.5')
+
+        date_from = parse_iso_datetime(date_from_str)
+        date_to = parse_iso_datetime(date_to_str)
+        category_id = int(category_id_str) if category_id_str and category_id_str.isdigit() else None
+        department_id = int(department_id_str) if department_id_str and department_id_str.isdigit() else None
+        status_filter = status_str.strip().lower() if status_str and status_str.strip() else None
+
+        try:
+            radius_km = float(radius_str)
+            if radius_km <= 0 or radius_km > 50:
+                radius_km = 0.5
+        except (ValueError, TypeError):
+            radius_km = 0.5
+
+        data = calculate_location_intelligence(
+            date_from=date_from,
+            date_to=date_to,
+            category_id=category_id,
+            department_id=department_id,
+            status_filter=status_filter,
+            hotspot_radius_km=radius_km
+        )
+        return Response(data)
+
+    def _get_filtered_predictive_qs(self, request):
+        from .analytics_insights import parse_iso_datetime
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        category_id_str = request.query_params.get('category')
+        department_id_str = request.query_params.get('department')
+
+        date_from = parse_iso_datetime(date_from_str)
+        date_to = parse_iso_datetime(date_to_str)
+        category_id = int(category_id_str) if category_id_str and category_id_str.isdigit() else None
+        department_id = int(department_id_str) if department_id_str and department_id_str.isdigit() else None
+
+        qs = Complaint.objects.all()
+        if date_from:
+            qs = qs.filter(created_at__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__lte=date_to)
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+        return qs, date_from, date_to
+
+    @action(detail=False, methods=['get'])
+    def predictive_trends(self, request):
+        """Task 20: Historical Daily, Weekly & Monthly Complaint Trends & Recurring Problems"""
+        from .predictive_intelligence import aggregate_historical_trends, detect_recurring_problems
+        qs, date_from, date_to = self._get_filtered_predictive_qs(request)
+        trends = aggregate_historical_trends(qs, date_from=date_from, date_to=date_to)
+        recurring = detect_recurring_problems(qs)
+        trends["recurring_problems"] = recurring
+        return Response(trends)
+
+    @action(detail=False, methods=['get'])
+    def predictive_forecast(self, request):
+        """Task 20: 7-Day Explainable Statistical Complaint Volume Forecast"""
+        from .predictive_intelligence import calculate_complaint_volume_forecast
+        qs, _, _ = self._get_filtered_predictive_qs(request)
+        horizon_str = request.query_params.get('horizon_days', '7')
+        try:
+            horizon = int(horizon_str)
+            if horizon <= 0 or horizon > 30:
+                return Response(
+                    {"error": "Forecast horizon must be between 1 and 30 days."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Invalid horizon_days parameter. Must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        forecast = calculate_complaint_volume_forecast(qs, forecast_horizon_days=horizon)
+        return Response(forecast)
+
+    @action(detail=False, methods=['get'])
+    def predictive_hotspots(self, request):
+        """Task 20: Civic Hotspot Risk Scoring (0 to 100)"""
+        from .predictive_intelligence import calculate_hotspot_risk_scores
+        qs, _, _ = self._get_filtered_predictive_qs(request)
+        hotspots = calculate_hotspot_risk_scores(qs)
+        return Response({"hotspot_risk_scores": hotspots, "count": len(hotspots)})
+
+    @action(detail=False, methods=['get'])
+    def predictive_recommendations(self, request):
+        """Task 20: Grounded Preventive Action Recommendations"""
+        from .predictive_intelligence import (
+            calculate_hotspot_risk_scores,
+            detect_recurring_problems,
+            generate_preventive_recommendations
+        )
+        qs, _, _ = self._get_filtered_predictive_qs(request)
+        hotspots = calculate_hotspot_risk_scores(qs)
+        recurring = detect_recurring_problems(qs)
+        recommendations = generate_preventive_recommendations(qs, hotspots=hotspots, recurring_problems=recurring)
+        return Response({"recommendations": recommendations, "count": len(recommendations)})
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    """
+    Task 13: In-App Notification ViewSet
+    - User-specific isolation (BOLA protected: users can ONLY access their own notifications)
+    - Supports filtering by read status (?is_read=false)
+    - Provides unread count endpoint
+    - Provides mark_read and mark_all_read actions
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Notification.objects.filter(user=user).select_related('complaint').order_by('-created_at')
+        is_read_param = self.request.query_params.get('is_read')
+        if is_read_param is not None:
+            if is_read_param.lower() in ['true', '1']:
+                qs = qs.filter(is_read=True)
+            elif is_read_param.lower() in ['false', '0']:
+                qs = qs.filter(is_read=False)
+        return qs
+
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Returns the total number of unread in-app notifications for the authenticated user."""
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({"unread_count": count})
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        """Marks an individual notification as read."""
+        notification = self.get_object()  # Automatically checks user ownership via get_queryset
+        if not notification.is_read:
+            notification.is_read = True
+            notification.save(update_fields=['is_read'])
+        return Response(NotificationSerializer(notification).data)
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        """Marks all unread notifications for the authenticated user as read."""
+        updated = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({"status": "success", "marked_read_count": updated})
+
+
+class CivicAssistantViewSet(viewsets.GenericViewSet):
+    """
+    Task 19: Smart Civic Knowledge Assistant ViewSet
+    - Endpoint: POST /api/assistant/chat/
+    - Provides conversational answers to citizen queries on complaint status,
+      filing help, municipal guidelines, SLA policies, and feedback/disputes.
+    - Supports English, Hindi, and Hinglish.
+    - Enforces BOLA: Personal complaint lookups verify user ownership.
+    - Employs deterministic fallbacks if Gemini is offline or quota is exhausted.
+    """
+    permission_classes = [permissions.AllowAny]  # General civic guidance is public; personal complaint queries check authentication internally
+
+    @action(detail=False, methods=['post'])
+    def chat(self, request):
+        message = request.data.get('message', '')
+        if not message or not str(message).strip():
+            return Response(
+                {"error": "Message content cannot be empty."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(str(message)) > 2000:
+            return Response(
+                {"error": "Message exceeds maximum permitted character length (2000 characters)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        complaint_id = request.data.get('complaint_id')
+        language = request.data.get('language', 'auto')
+
+        from .civic_assistant import CivicAssistantService
+        user = request.user if request.user.is_authenticated else None
+
+        result = CivicAssistantService.process_citizen_query(
+            user=user,
+            message=str(message).strip(),
+            complaint_identifier=str(complaint_id).strip() if complaint_id else None,
+            requested_language=language
+        )
+        return Response(result, status=status.HTTP_200_OK)
+

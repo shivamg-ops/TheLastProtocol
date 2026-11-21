@@ -6,9 +6,15 @@ from .models import (
 from .validators import get_file_type_from_file
 
 class UserSerializer(serializers.ModelSerializer):
+    department_name = serializers.ReadOnlyField(source='department.name')
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 'preferred_language', 'organization_name', 'address', 'created_at']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 'role',
+            'phone_number', 'preferred_language', 'organization_name', 'department',
+            'department_name', 'skills', 'latitude', 'longitude', 'address', 'created_at'
+        ]
         read_only_fields = ['id', 'created_at']
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -86,11 +92,16 @@ class ComplaintSerializer(serializers.ModelSerializer):
     evidences = ComplaintEvidenceSerializer(many=True, read_only=True)
     timeline = ComplaintTimelineSerializer(many=True, read_only=True)
     feedback = CitizenFeedbackSerializer(read_only=True)
+    sla_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Complaint
         fields = '__all__'
         read_only_fields = ['id', 'tracking_id', 'citizen', 'created_at', 'updated_at']
+
+    def get_sla_info(self, obj):
+        from .sla_monitor import SLAMonitor
+        return SLAMonitor.evaluate_complaint_sla(obj)
 
     def validate(self, attrs):
         """

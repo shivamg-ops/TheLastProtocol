@@ -2,9 +2,10 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 import io
+from unittest.mock import patch, MagicMock
 from PIL import Image
 from django.core.files.uploadedfile import SimpleUploadedFile
-from .models import User, Department, ComplaintCategory, Complaint, ComplaintStatus, ComplaintEvidence, CitizenFeedback, UserRole
+from .models import User, Department, ComplaintCategory, Complaint, ComplaintStatus, ComplaintEvidence, CitizenFeedback, Notification, UserRole
 
 class JanSahayakAPITests(TestCase):
     def setUp(self):
@@ -877,6 +878,1464 @@ class JanSahayakAPITests(TestCase):
         new_comp.refresh_from_db()
         self.assertEqual(new_comp.assigned_staff, self.staff)
         self.assertEqual(new_comp.status, 'assigned')
+
+    def test_ai_evidence_verifier_and_trust_score(self):
+        import os
+        import tempfile
+        from PIL import Image
+        from unittest.mock import patch, MagicMock
+        from .evidence_verifier import EvidenceVerifier
+        from .models import Complaint, ComplaintEvidence
+
+        # 1. Missing Evidence Test
+        res_none = EvidenceVerifier.verify_evidence(image_file_path=None)
+        self.assertEqual(res_none["evidence_status"], "not_checked")
+        self.assertEqual(res_none["trust_score"], 0.0)
+        self.assertFalse(res_none["review_required"])
+
+        # 2. Corrupted Image Test
+        corrupt_f = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        corrupt_f.write(b"CORRUPTED_NON_IMAGE_DATA_12345")
+        corrupt_f.close()
+        try:
+            res_corrupt = EvidenceVerifier.verify_evidence(image_file_path=corrupt_f.name)
+            self.assertEqual(res_corrupt["evidence_status"], "flagged")
+            self.assertEqual(res_corrupt["trust_score"], 0.0)
+            self.assertTrue(res_corrupt["review_required"])
+            self.assertIn("Corrupted", " ".join(res_corrupt["review_reasons"]))
+        finally:
+            if os.path.exists(corrupt_f.name):
+                os.remove(corrupt_f.name)
+
+        # 3. Create a real readable image
+        valid_img_f = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        img = Image.new("RGB", (64, 64), color="orange")
+        img.save(valid_img_f, format="JPEG")
+        valid_img_f.close()
+
+        try:
+            # 4. Inconclusive Scenario (Both Gemini and YOLO unavailable)
+            with patch("api.ai_service.analyze_image_evidence") as mock_gemini, \
+                 patch("api.yolo_detector.YOLODetector.detect") as mock_yolo:
+                mock_gemini.return_value = {"status": "pending", "analysis": "Service unavailable"}
+                mock_yolo.return_value = {"detection_status": "model_not_found"}
+
+                res_inconc = EvidenceVerifier.verify_evidence(
+                    image_file_path=valid_img_f.name,
+                    complaint_text="Pothole on main street",
+                    complaint_category="Roads and Potholes"
+                )
+                self.assertEqual(res_inconc["evidence_status"], "inconclusive")
+                self.assertTrue(res_inconc["review_required"])
+                # Invariant: Missing signals must NOT boost trust score
+                self.assertLess(res_inconc["trust_score"], 0.40)
+
+            # 5. Relevant Verified Image (Gemini match = True, YOLO confirms)
+            with patch("api.ai_service.analyze_image_evidence") as mock_gemini, \
+                 patch("api.yolo_detector.YOLODetector.detect") as mock_yolo:
+                mock_gemini.return_value = {
+                    "status": "success",
+                    "complaint_image_match": True,
+                    "confidence_score": 0.90,
+                    "image_readability": "clear",
+                    "detected_issue": "Road pothole"
+                }
+                mock_yolo.return_value = {
+                    "detection_status": "success",
+                    "detected_objects": [{"class_name": "pothole", "confidence": 0.85}],
+                    "confidence": 0.85,
+                    "class_name": "pothole"
+                }
+
+                res_verified = EvidenceVerifier.verify_evidence(
+                    image_file_path=valid_img_f.name,
+                    complaint_text="Pothole on road",
+                    complaint_category="Roads and Potholes"
+                )
+                self.assertEqual(res_verified["evidence_status"], "verified")
+                self.assertFalse(res_verified["review_required"])
+                self.assertGreaterEqual(res_verified["trust_score"], 0.65)
+                # Invariant: Never claims 100% certainty (max 0.95)
+                self.assertLessEqual(res_verified["trust_score"], 0.95)
+
+            # 6. Irrelevant / Mismatched Image (e.g. Cat photo for road complaint)
+            with patch("api.ai_service.analyze_image_evidence") as mock_gemini:
+                mock_gemini.return_value = {
+                    "status": "success",
+                    "complaint_image_match": False,
+                    "confidence_score": 0.92,
+                    "image_readability": "clear",
+                    "detected_issue": "Domestic pet"
+                }
+                res_mismatch = EvidenceVerifier.verify_evidence(
+                    image_file_path=valid_img_f.name,
+                    complaint_text="Pothole on road",
+                    complaint_category="Roads and Potholes"
+                )
+                self.assertEqual(res_mismatch["evidence_status"], "flagged")
+                self.assertTrue(res_mismatch["review_required"])
+                self.assertIn("mismatch", " ".join(res_mismatch["review_reasons"]))
+
+            # 7. Model Disagreement (YOLO finds pothole, Gemini claims mismatch)
+            with patch("api.ai_service.analyze_image_evidence") as mock_gemini, \
+                 patch("api.yolo_detector.YOLODetector.detect") as mock_yolo:
+                mock_gemini.return_value = {
+                    "status": "success",
+                    "complaint_image_match": False,
+                    "confidence_score": 0.85,
+                    "image_readability": "clear"
+                }
+                mock_yolo.return_value = {
+                    "detection_status": "success",
+                    "detected_objects": [{"class_name": "pothole"}],
+                    "confidence": 0.80,
+                    "class_name": "pothole"
+                }
+                res_disagree = EvidenceVerifier.verify_evidence(
+                    image_file_path=valid_img_f.name,
+                    complaint_text="Pothole on road",
+                    complaint_category="Roads and Potholes"
+                )
+                self.assertEqual(res_disagree["evidence_status"], "flagged")
+                self.assertTrue(res_disagree["review_required"])
+                self.assertTrue(any("Disagreement" in r for r in res_disagree["review_reasons"]))
+
+            # 8. Duplicate Image Evidence Integration
+            with patch("api.ai_service.detect_duplicate_evidence") as mock_dup:
+                mock_dup.return_value = {
+                    "is_duplicate": True,
+                    "duplicate_type": "exact",
+                    "similarity_score": 1.0,
+                    "matched_evidence_id": 999
+                }
+                res_dup = EvidenceVerifier.verify_evidence(
+                    image_file_path=valid_img_f.name,
+                    complaint_text="Pothole on road",
+                    complaint_category="Roads and Potholes"
+                )
+                self.assertEqual(res_dup["evidence_status"], "flagged")
+                self.assertTrue(res_dup["review_required"])
+                self.assertIn("Duplicate evidence detected", " ".join(res_dup["review_reasons"]))
+
+        finally:
+            if os.path.exists(valid_img_f.name):
+                os.remove(valid_img_f.name)
+
+    def test_smart_complaint_lifecycle_and_sla_monitoring(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import Complaint, Department, ComplaintCategory, ComplaintStatus
+        from .sla_monitor import SLAMonitor
+
+        now = timezone.now()
+
+        # 1. Correct SLA Deadline Calculation
+        # self.dept has sla_hours=24
+        c_active = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Garbage overflowing on street",
+            description="Dustbin has not been cleared for days",
+            address="Gandhi Chowk near Bus Stand",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED
+        )
+        c_active.created_at = now
+        c_active.save(update_fields=['created_at'])
+
+        deadline = SLAMonitor.calculate_sla_deadline(c_active)
+        self.assertIsNotNone(deadline)
+        self.assertEqual(deadline, now + timedelta(hours=24))
+
+        # 2. Missing SLA Configuration Scenario
+        c_no_sla = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Unmapped civic problem",
+            description="Miscellaneous civic complaint with no department",
+            address="Market Yard"
+        )
+        res_no_sla = SLAMonitor.evaluate_complaint_sla(c_no_sla, current_time=now)
+        self.assertEqual(res_no_sla["sla_status"], "not_configured")
+        self.assertFalse(res_no_sla["is_overdue"])
+        self.assertIsNone(res_no_sla["sla_hours"])
+
+        # 3. Complaint Within SLA (e.g. 2 hours after creation)
+        res_within = SLAMonitor.evaluate_complaint_sla(c_active, current_time=now + timedelta(hours=2))
+        self.assertEqual(res_within["sla_status"], "within_sla")
+        self.assertFalse(res_within["is_overdue"])
+        self.assertFalse(res_within["approaching_deadline"])
+        self.assertEqual(res_within["remaining_seconds"], 22 * 3600)
+
+        # 4. Complaint Approaching Deadline (e.g. 21 hours after creation, 3 hours left < 6h)
+        res_approach = SLAMonitor.evaluate_complaint_sla(c_active, current_time=now + timedelta(hours=21))
+        self.assertEqual(res_approach["sla_status"], "approaching")
+        self.assertTrue(res_approach["approaching_deadline"])
+        self.assertFalse(res_approach["is_overdue"])
+
+        # 5. Overdue Complaint & Escalation Recommendation (e.g. 30 hours after creation)
+        res_overdue = SLAMonitor.evaluate_complaint_sla(c_active, current_time=now + timedelta(hours=30))
+        self.assertEqual(res_overdue["sla_status"], "overdue")
+        self.assertTrue(res_overdue["is_overdue"])
+        self.assertTrue(res_overdue["escalation_recommended"])
+        self.assertIn("overdue by 6.0h", res_overdue["escalation_reason"])
+
+        # 6. Resolved Complaint Excluded from Overdue
+        c_active.status = ComplaintStatus.RESOLVED
+        c_active.resolution_date = now + timedelta(hours=20)
+        c_active.save(update_fields=['status', 'resolution_date'])
+
+        res_resolved = SLAMonitor.evaluate_complaint_sla(c_active, current_time=now + timedelta(hours=30))
+        self.assertEqual(res_resolved["sla_status"], "completed_on_time")
+        self.assertFalse(res_resolved["is_overdue"])
+        self.assertFalse(res_resolved["escalation_recommended"])
+
+        # 7. Escalation Application & Duplicate Escalation Prevention
+        c_overdue = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Overdue water pipeline leak",
+            description="Pipeline leaking profusely",
+            address="Subhash Nagar",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.IN_PROGRESS,
+            sla_target_date=now - timedelta(hours=5)
+        )
+
+        # First escalation application: succeeds
+        success1 = SLAMonitor.apply_admin_escalation(c_overdue, "Overdue by 5 hours", user=self.admin)
+        self.assertTrue(success1)
+        c_overdue.refresh_from_db()
+        self.assertTrue(c_overdue.is_escalated)
+
+        # Duplicate escalation attempt: prevented safely
+        success2 = SLAMonitor.apply_admin_escalation(c_overdue, "Duplicate call", user=self.admin)
+        self.assertFalse(success2)
+
+        # 8. Lifecycle Stages Verification
+        lifecycle = SLAMonitor.get_lifecycle_stage(c_overdue)
+        self.assertTrue(lifecycle["submitted"]["completed"])
+        self.assertTrue(lifecycle["department_assigned"]["completed"])
+        self.assertFalse(lifecycle["staff_assigned"]["completed"])  # No staff assigned yet
+        self.assertTrue(lifecycle["in_progress"]["completed"])
+        self.assertFalse(lifecycle["resolved"]["completed"])
+
+    def test_smart_notifications_and_citizen_updates(self):
+        """
+        Task 13 Tests:
+        1. Notification dispatch on submission, department assigned, staff assigned, and status change.
+        2. Idempotency mechanism prevents duplicate notifications for identical events.
+        3. Citizen privacy & BOLA: User can only access their own notifications.
+        4. Notification ViewSet endpoints: list, unread_count, mark_read, mark_all_read.
+        5. SLA Escalation notification integration.
+        """
+        from .models import Complaint, Notification, ComplaintStatus
+        from .notifications import (
+            send_notification_idempotent,
+            notify_complaint_submitted,
+            notify_department_assigned,
+            notify_staff_assigned,
+            notify_status_update,
+            notify_escalation
+        )
+
+        # 1. Clean existing notifications
+        Notification.objects.filter(user=self.citizen).delete()
+
+        # Create complaint
+        comp = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Broken streetlight",
+            description="Streetlight pole #42 is unlit and flickering",
+            address="Shivaji Park, Sector 4",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED
+        )
+
+        # 2. Test Submission Notification
+        notif_sub = notify_complaint_submitted(comp)
+        self.assertIsNotNone(notif_sub)
+        self.assertEqual(notif_sub.user, self.citizen)
+        self.assertEqual(notif_sub.notification_type, 'complaint_submitted')
+        self.assertIn(comp.tracking_id, notif_sub.title)
+
+        # Test Idempotency: Duplicate submission notification call within window is suppressed
+        notif_sub_dup = notify_complaint_submitted(comp)
+        self.assertEqual(notif_sub.id, notif_sub_dup.id)
+        self.assertEqual(Notification.objects.filter(user=self.citizen, notification_type='complaint_submitted').count(), 1)
+
+        # 3. Test Department Assigned Notification
+        notif_dept = notify_department_assigned(comp)
+        self.assertIsNotNone(notif_dept)
+        self.assertEqual(notif_dept.notification_type, 'department_assigned')
+        self.assertIn(self.dept.name, notif_dept.message)
+
+        # 4. Test Staff Assigned Notification (both staff and citizen get privacy-safe notifications)
+        staff_results = notify_staff_assigned(comp, self.staff)
+        self.assertIsNotNone(staff_results["staff"])
+        self.assertEqual(staff_results["staff"].user, self.staff)
+        self.assertIsNotNone(staff_results["citizen"])
+        self.assertEqual(staff_results["citizen"].user, self.citizen)
+        # Verify citizen message does not leak private staff user credentials
+        self.assertNotIn("password", staff_results["citizen"].message.lower())
+
+        # 5. Test Status Update Notification
+        notif_status = notify_status_update(comp, 'submitted', 'in_progress', public_notes="Maintenance team dispatched.")
+        self.assertIsNotNone(notif_status)
+        self.assertEqual(notif_status.notification_type, 'status_update')
+        self.assertIn("in progress", notif_status.message.lower())
+
+        # 6. Test Escalation Notification
+        notif_esc = notify_escalation(comp, reason="SLA threshold reached")
+        self.assertIsNotNone(notif_esc)
+        self.assertEqual(notif_esc.notification_type, 'escalation')
+
+        # 7. Test API Endpoints & BOLA Protection
+        self.client.force_authenticate(user=self.citizen)
+
+        # a) List notifications
+        res_list = self.client.get('/api/notifications/')
+        self.assertEqual(res_list.status_code, 200)
+        cit_notif_ids = [n['id'] for n in res_list.data]
+        # Staff's notification should NOT be in citizen's list
+        self.assertNotIn(staff_results["staff"].id, cit_notif_ids)
+
+        # b) Unread Count
+        res_count = self.client.get('/api/notifications/unread_count/')
+        self.assertEqual(res_count.status_code, 200)
+        self.assertGreater(res_count.data['unread_count'], 0)
+        initial_unread = res_count.data['unread_count']
+
+        # c) Mark single notification as read
+        res_read = self.client.post(f'/api/notifications/{notif_sub.id}/mark_read/')
+        self.assertEqual(res_read.status_code, 200)
+        self.assertTrue(res_read.data['is_read'])
+
+        # Verify unread count decreased by 1
+        res_count2 = self.client.get('/api/notifications/unread_count/')
+        self.assertEqual(res_count2.data['unread_count'], initial_unread - 1)
+
+        # d) BOLA verification: citizen cannot mark staff's notification as read
+        res_bola = self.client.post(f'/api/notifications/{staff_results["staff"].id}/mark_read/')
+        self.assertEqual(res_bola.status_code, 404)
+
+        # e) Mark all read
+        res_mark_all = self.client.post('/api/notifications/mark_all_read/')
+        self.assertEqual(res_mark_all.status_code, 200)
+        res_count3 = self.client.get('/api/notifications/unread_count/')
+        self.assertEqual(res_count3.data['unread_count'], 0)
+
+    def test_ai_powered_analytics_and_insights_dashboard(self):
+        """
+        Task 14 Tests:
+        1. Correct total, status-wise, category-wise, and department-wise counts.
+        2. Average resolution time calculation and SLA compliance percentage.
+        3. Date range and multidimensional filter application.
+        4. Empty dataset handling without errors or divide-by-zero.
+        5. RBAC / BOLA: Citizen access to /api/analytics/summary/ is denied (HTTP 403).
+        6. Admin / Staff access is permitted (HTTP 200).
+        7. Gemini fallback to deterministic insights when unavailable.
+        8. AI insights strictly explain pre-calculated statistics without inventing data.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import Complaint, Department, ComplaintCategory, ComplaintStatus
+        from .analytics_insights import (
+            calculate_analytics_metrics,
+            generate_deterministic_insights,
+            generate_ai_insights
+        )
+
+        now = timezone.now()
+
+        # 1. Test Empty Dataset Handling
+        Complaint.objects.all().delete()
+        empty_metrics = calculate_analytics_metrics()
+        self.assertEqual(empty_metrics["summary"]["total_complaints"], 0)
+        self.assertEqual(empty_metrics["summary"]["resolution_rate"], 0.0)
+        self.assertEqual(empty_metrics["summary"]["sla_compliance_rate"], 0.0)
+        self.assertEqual(empty_metrics["summary"]["avg_resolution_hours"], 0.0)
+        self.assertEqual(len(empty_metrics["category_breakdown"]), 0)
+        self.assertEqual(len(empty_metrics["department_performance"]), 0)
+
+        empty_insights = generate_deterministic_insights(empty_metrics)
+        self.assertTrue(len(empty_insights) > 0)
+        self.assertEqual(empty_insights[0]["type"], "info")
+
+        # 2. Populate Concrete Database Records
+        c1 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Broken drainage pipe",
+            description="Drainage overflowing near market",
+            address="Market Yard lane 2",
+            department=self.dept, # Solid Waste Management, sla_hours=24
+            category=self.category, # Sanitation
+            status=ComplaintStatus.RESOLVED,
+            resolution_date=now - timedelta(hours=10),
+            sla_target_date=now + timedelta(hours=14)
+        )
+        c1.created_at = now - timedelta(hours=20)
+        c1.save(update_fields=['created_at'])
+        # Duration: 10 hours
+
+        c2 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Garbage bin dumped on road",
+            description="Litter scattered everywhere",
+            address="Gandhi chowk",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.RESOLVED,
+            resolution_date=now - timedelta(hours=2),
+            sla_target_date=now - timedelta(hours=6) # Overdue resolution
+        )
+        c2.created_at = now - timedelta(hours=32)
+        c2.save(update_fields=['created_at'])
+        # Duration: 30 hours, completed overdue
+
+        c3 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Streetlight not working",
+            description="Pole light has blown fuse",
+            address="Nehru Nagar",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.IN_PROGRESS,
+            sla_target_date=now - timedelta(hours=4) # Currently overdue
+        )
+        c3.created_at = now - timedelta(hours=28)
+        c3.save(update_fields=['created_at'])
+
+        c4 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Pothole on main highway",
+            description="Dangerous crater on bypass road",
+            address="Expressway bypass",
+            department=None, # Unassigned
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED
+        )
+        c4.created_at = now - timedelta(hours=1)
+        c4.save(update_fields=['created_at'])
+
+        # 3. Test Metric Calculations
+        metrics = calculate_analytics_metrics()
+        summary = metrics["summary"]
+
+        self.assertEqual(summary["total_complaints"], 4)
+        self.assertEqual(summary["resolved_complaints"], 2)
+        self.assertEqual(summary["in_progress_complaints"], 1)
+        self.assertEqual(summary["pending_complaints"], 1)
+        self.assertEqual(summary["overdue_complaints"], 1) # c3 is overdue
+        self.assertEqual(summary["resolution_rate"], 50.0) # 2 out of 4 resolved
+
+        # SLA Compliance: 1 resolved on time (c1), 1 resolved overdue (c2) -> 50.0%
+        self.assertEqual(summary["sla_compliance_rate"], 50.0)
+
+        # Average resolution time: (10h + 30h) / 2 = 20.0h
+        self.assertEqual(summary["avg_resolution_hours"], 20.0)
+
+        # Category and department distributions
+        self.assertEqual(metrics["category_breakdown"][0]["count"], 4)
+        dept_perf = {d["name"]: d for d in metrics["department_performance"]}
+        self.assertIn("Solid Waste Management", dept_perf)
+        self.assertEqual(dept_perf["Solid Waste Management"]["total_complaints"], 3)
+        self.assertEqual(dept_perf["Solid Waste Management"]["resolved_count"], 2)
+
+        # 4. Test Filters
+        # Filter by department
+        dept_filtered = calculate_analytics_metrics(department_id=self.dept.id)
+        self.assertEqual(dept_filtered["summary"]["total_complaints"], 3)
+
+        # Filter by status
+        resolved_filtered = calculate_analytics_metrics(status_filter='resolved')
+        self.assertEqual(resolved_filtered["summary"]["total_complaints"], 2)
+
+        # Filter by date range (only last 5 hours)
+        recent_filtered = calculate_analytics_metrics(date_from=now - timedelta(hours=5))
+        self.assertEqual(recent_filtered["summary"]["total_complaints"], 1) # only c4
+
+        # 5. RBAC & BOLA Access Control
+        # a) Citizen is denied access (HTTP 403)
+        self.client.force_authenticate(user=self.citizen)
+        res_cit = self.client.get('/api/analytics/summary/')
+        self.assertEqual(res_cit.status_code, 403)
+
+        # b) Staff has access (HTTP 200)
+        self.client.force_authenticate(user=self.staff)
+        res_staff = self.client.get('/api/analytics/summary/')
+        self.assertEqual(res_staff.status_code, 200)
+
+        # c) Admin has access (HTTP 200)
+        self.client.force_authenticate(user=self.admin)
+        res_admin = self.client.get('/api/analytics/summary/')
+        self.assertEqual(res_admin.status_code, 200)
+        self.assertEqual(res_admin.data["total_complaints"], 4)
+        self.assertEqual(res_admin.data["sla_compliance_rate"], 50.0)
+        self.assertIn("ai_insights", res_admin.data)
+
+        # 6. Test Gemini Fallback to Deterministic Insights
+        with patch("api.gemini_client.call_gemini_safe") as mock_call, \
+             patch("api.gemini_client.GeminiClientManager.is_available") as mock_avail:
+            mock_avail.return_value = False
+            mock_call.return_value = None
+
+            insights_res = generate_ai_insights(metrics)
+            self.assertEqual(insights_res["generated_by"], "deterministic")
+            self.assertIn("deterministic", insights_res["disclaimer"].lower())
+            # Verifies insights accurately cite real numbers
+            descriptions = " ".join([i["description"] for i in insights_res["insights"]])
+            self.assertIn("4", descriptions) # 4 complaints
+
+    def test_smart_location_intelligence_and_hotspot_mapping(self):
+        """
+        Task 15 Tests:
+        1. Valid GPS coordinates counted and geolocated.
+        2. Missing GPS coordinates counted in without_gps_count and never fabricated.
+        3. Invalid latitude/longitude coordinates (out of bounds or 0,0) rejected.
+        4. Hotspot spatial clustering: groups nearby complaints (< 500m) into clusters.
+        5. Explainable centroids: centroid coordinates labeled as approximate centers.
+        6. No duplicate counting: each complaint belongs to at most one cluster.
+        7. Date, category, and department filters.
+        8. Empty dataset handling without errors.
+        9. RBAC: Citizens denied access (HTTP 403), Admin/Staff granted access (HTTP 200).
+        10. Privacy: citizen usernames/phone numbers omitted from map payload.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import Complaint, Department, ComplaintCategory, ComplaintStatus
+        from .location_intelligence import (
+            calculate_location_intelligence,
+            is_valid_coordinate,
+            haversine_distance,
+            detect_hotspots
+        )
+
+        now = timezone.now()
+
+        # 1. Coordinate Validation Tests
+        self.assertTrue(is_valid_coordinate(18.5204, 73.8567)) # Pune
+        self.assertTrue(is_valid_coordinate(-33.8688, 151.2093)) # Sydney
+        self.assertFalse(is_valid_coordinate(95.0, 73.8567)) # Lat out of bounds
+        self.assertFalse(is_valid_coordinate(18.5204, 195.0)) # Lng out of bounds
+        self.assertFalse(is_valid_coordinate(0.0, 0.0)) # Null Island placeholder
+        self.assertFalse(is_valid_coordinate(None, 73.8567)) # None lat
+        self.assertFalse(is_valid_coordinate("invalid", "coords")) # Non-numeric
+
+        # 2. Empty Dataset Handling
+        Complaint.objects.all().delete()
+        empty_loc = calculate_location_intelligence()
+        self.assertEqual(empty_loc["summary"]["total_complaints"], 0)
+        self.assertEqual(empty_loc["summary"]["geolocated_complaints_count"], 0)
+        self.assertEqual(empty_loc["summary"]["without_gps_count"], 0)
+        self.assertEqual(len(empty_loc["hotspots"]), 0)
+        self.assertEqual(len(empty_loc["complaint_markers"]), 0)
+        self.assertIsNone(empty_loc["map_center"])
+
+        # 3. Create Controlled Dataset
+        # Location A: Shivaji Nagar (18.5314, 73.8446)
+        # c1 & c2 are ~100m apart (Hotspot 1)
+        c1 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Garbage bin overflowing Shivaji Nagar",
+            description="Near bus depot Shivaji Nagar",
+            address="Shivaji Nagar Bus Stop",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED,
+            latitude=18.531400,
+            longitude=73.844600
+        )
+        c1.created_at = now - timedelta(days=2)
+        c1.save(update_fields=['created_at'])
+
+        c2 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Litter on sidewalk Shivaji Nagar",
+            description="Near railway gate",
+            address="Shivaji Nagar Station Road",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.IN_PROGRESS,
+            latitude=18.532200, # ~100 meters away
+            longitude=73.845100
+        )
+        c2.created_at = now - timedelta(days=1)
+        c2.save(update_fields=['created_at'])
+
+        # Location B: Hadapsar (18.5089, 73.9259) - >8 km away (Isolated Point)
+        c3 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Streetlight pole unlit in Hadapsar",
+            description="Dark stretch on main road",
+            address="Hadapsar Magarpatta Road",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED,
+            latitude=18.508900,
+            longitude=73.925900
+        )
+        c3.created_at = now
+        c3.save(update_fields=['created_at'])
+
+        # Location C: Address-only complaints (NO GPS)
+        c_no_gps = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Water leakage in pipeline",
+            description="Behind central market",
+            address="Central Market Yard gate 4",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED,
+            latitude=None,
+            longitude=None
+        )
+
+        # Location D: Invalid GPS Coordinates (out of bounds)
+        c_invalid_gps = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Pothole on ring road",
+            description="Near highway bypass",
+            address="Ring road bypass",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED,
+            latitude=99.000000,
+            longitude=250.000000
+        )
+
+        # 4. Test Location Intelligence Execution
+        loc_res = calculate_location_intelligence(hotspot_radius_km=0.5)
+        summary = loc_res["summary"]
+
+        self.assertEqual(summary["total_complaints"], 5)
+        self.assertEqual(summary["geolocated_complaints_count"], 3) # c1, c2, c3
+        self.assertEqual(summary["without_gps_count"], 2) # c_no_gps, c_invalid_gps
+        self.assertEqual(len(loc_res["complaint_markers"]), 3)
+
+        # 5. Hotspot Clustering Verification
+        # c1 and c2 should form 1 hotspot; c3 is isolated so does not form a cluster
+        self.assertEqual(summary["hotspot_count"], 1)
+        hotspot = loc_res["hotspots"][0]
+        self.assertEqual(hotspot["complaint_count"], 2)
+        self.assertIn(c1.id, hotspot["complaint_ids"])
+        self.assertIn(c2.id, hotspot["complaint_ids"])
+        self.assertNotIn(c3.id, hotspot["complaint_ids"])
+        self.assertTrue(hotspot["is_approximate_center"])
+        # Verify centroid is between c1 and c2
+        self.assertAlmostEqual(hotspot["approximate_latitude"], (18.531400 + 18.532200) / 2, places=4)
+
+        # Invariant: No duplicate complaint counting
+        all_cluster_ids = []
+        for h in loc_res["hotspots"]:
+            all_cluster_ids.extend(h["complaint_ids"])
+        self.assertEqual(len(all_cluster_ids), len(set(all_cluster_ids)))
+
+        # 6. Privacy & PII Verification
+        # Confirm citizen usernames, emails, or private user IDs are NOT returned in marker data
+        first_marker = loc_res["complaint_markers"][0]
+        self.assertNotIn("citizen_username", first_marker)
+        self.assertNotIn("citizen_phone", first_marker)
+        self.assertNotIn("citizen_email", first_marker)
+
+        # 7. Test Filters
+        # Filter date_from = last 12 hours (should include c3 only)
+        filtered_date = calculate_location_intelligence(date_from=now - timedelta(hours=12))
+        self.assertEqual(filtered_date["summary"]["geolocated_complaints_count"], 1)
+        self.assertEqual(filtered_date["complaint_markers"][0]["id"], c3.id)
+
+        # 8. API Endpoint & Security Verification
+        # a) Citizen is denied access (HTTP 403)
+        self.client.force_authenticate(user=self.citizen)
+        res_cit = self.client.get('/api/analytics/location_intelligence/')
+        self.assertEqual(res_cit.status_code, 403)
+
+        # b) Admin has access (HTTP 200)
+        self.client.force_authenticate(user=self.admin)
+        res_admin = self.client.get('/api/analytics/location_intelligence/')
+        self.assertEqual(res_admin.status_code, 200)
+        self.assertEqual(res_admin.data["summary"]["geolocated_complaints_count"], 3)
+        self.assertEqual(res_admin.data["summary"]["hotspot_count"], 1)
+
+    def test_multilingual_voice_complaint_assistant(self):
+        """
+        Task 16 Tests:
+        1. Voice transcript passed to classifier accurately classifies Hindi/Hinglish/English.
+        2. Missing location triggers clarification question in user's language and ready_to_submit=False.
+        3. General inquiry isolation (inquiry/general intent, non-complaint).
+        4. Invalid Gemini response / Gemini unavailable fallback to deterministic rule engine.
+        5. ready_to_submit=False prevents complaint submission without valid details.
+        6. Manual correction of transcript preserves citizen meaning.
+        7. Explicit confirmation required before submission (original_input_mode='voice' preserved).
+        8. Standard text complaint submission remains fully functional.
+        """
+        from .ai_service import analyze_complaint_text
+        from .models import Complaint, ComplaintStatus
+
+        # 1. Hindi Voice Transcript Input
+        hindi_transcript = "गांधी चौक के पास कचरे का ढेर लगा हुआ है बदबू आ रही है"
+        res_hi = analyze_complaint_text(hindi_transcript)
+        self.assertEqual(res_hi["intent"], "complaint")
+        self.assertEqual(res_hi["category"], "Garbage and Sanitation")
+        self.assertEqual(res_hi["detected_language"], "hi")
+        self.assertIsNotNone(res_hi["location_extracted"])
+        self.assertIn("गांधी चौक", res_hi["location_extracted"])
+        self.assertTrue(res_hi["ready_to_submit"])
+
+        # 2. Hinglish Voice Transcript with Missing Location
+        hinglish_missing_loc = "Bhai hamare yahan sadak par bahut bada gaddha hai bike slip ho rahi hai"
+        res_hinglish = analyze_complaint_text(hinglish_missing_loc)
+        self.assertEqual(res_hinglish["intent"], "complaint")
+        self.assertEqual(res_hinglish["category"], "Roads and Potholes")
+        self.assertEqual(res_hinglish["detected_language"], "hinglish")
+        self.assertIsNone(res_hinglish["location_extracted"])
+        self.assertFalse(res_hinglish["ready_to_submit"])
+        self.assertIsNotNone(res_hinglish["clarification_question"])
+        self.assertIn("landmark", res_hinglish["clarification_question"].lower())
+
+        # 3. Marathi Voice Transcript Input
+        marathi_transcript = "टिळक रोड जवळ गटाराचे पाणी रस्त्यावर वाहत आहे"
+        res_mr = analyze_complaint_text(marathi_transcript)
+        self.assertEqual(res_mr["intent"], "complaint")
+        self.assertEqual(res_mr["category"], "Drainage and Sewage")
+        self.assertEqual(res_mr["detected_language"], "mr")
+        self.assertIsNotNone(res_mr["location_extracted"])
+
+        # 4. English Voice Transcript Input
+        english_transcript = "Streetlight pole flickering and broken near City Hospital"
+        res_en = analyze_complaint_text(english_transcript)
+        self.assertEqual(res_en["intent"], "complaint")
+        self.assertEqual(res_en["category"], "Streetlights")
+        self.assertEqual(res_en["detected_language"], "en")
+        self.assertIn("City Hospital", res_en["location_extracted"])
+        self.assertTrue(res_en["ready_to_submit"])
+
+        # 5. General Inquiry Isolation
+        inquiry_text = "How do I register a birth certificate or check office timings?"
+        res_inquiry = analyze_complaint_text(inquiry_text)
+        self.assertEqual(res_inquiry["intent"], "inquiry")
+        self.assertFalse(res_inquiry["ready_to_submit"])
+        self.assertEqual(res_inquiry["category"], "General Inquiry")
+
+        # 6. Gemini Unavailable Fallback
+        with patch("api.ai_service.call_gemini_safe") as mock_gemini:
+            mock_gemini.return_value = None  # Simulates API downtime or quota limit
+            fallback_res = analyze_complaint_text("Broken water pipe near Market Yard")
+            self.assertEqual(fallback_res["intent"], "complaint")
+            self.assertEqual(fallback_res["category"], "Water Supply")
+            self.assertIn("Market Yard", fallback_res["location_extracted"])
+            self.assertTrue(fallback_res["ready_to_submit"])
+
+        # 7. Invalid Gemini JSON Response Fallback
+        with patch("api.ai_service.call_gemini_safe") as mock_gemini:
+            mock_gemini.return_value = "Non-JSON random string response from LLM"
+            invalid_res = analyze_complaint_text("Broken streetlight near Metro Station")
+            self.assertEqual(invalid_res["intent"], "complaint")
+            self.assertEqual(invalid_res["category"], "Streetlights")
+            self.assertIn("Metro Station", invalid_res["location_extracted"])
+
+        # 8. Backend API Complaint Submission with Voice Input Mode
+        self.client.force_authenticate(user=self.citizen)
+
+        voice_payload = {
+            "title": "Road pothole near Gandhi Chowk",
+            "description": "Voice recorded transcript: Road pothole causing accidents near Gandhi Chowk",
+            "category": self.category.id,
+            "department": self.dept.id,
+            "priority": "high",
+            "address": "Gandhi Chowk main market",
+            "original_input_mode": "voice",
+            "detected_language": "hi"
+        }
+        res_submit = self.client.post('/api/complaints/', voice_payload)
+        self.assertEqual(res_submit.status_code, 201)
+        self.assertEqual(res_submit.data["original_input_mode"], "voice")
+        self.assertEqual(res_submit.data["detected_language"], "hi")
+
+        # 9. Verify Standard Text Submission Remains Functional
+        text_payload = {
+            "title": "Garbage dump near Bus Depot",
+            "description": "Standard text description of garbage overflowing",
+            "category": self.category.id,
+            "department": self.dept.id,
+            "priority": "medium",
+            "address": "Bus Depot sector 5",
+            "original_input_mode": "text",
+            "detected_language": "en"
+        }
+        res_text = self.client.post('/api/complaints/', text_payload)
+        self.assertEqual(res_text.status_code, 201)
+        self.assertEqual(res_text.data["original_input_mode"], "text")
+
+    def test_citizen_trust_feedback_and_resolution_verification(self):
+        """
+        Task 17 Tests:
+        1. Staff marks complaint resolved -> sets resolution_verification_status='pending_citizen_confirmation'.
+        2. Citizen receives notification awaiting resolution confirmation.
+        3. Wrong user cannot confirm or dispute resolution (BOLA protection, HTTP 403).
+        4. Rating validation: valid (1-5) accepted, invalid (<1 or >5 or non-digit) rejected (HTTP 400).
+        5. Correct complaint owner confirms resolution -> status='verified', verification_status='citizen_confirmed'.
+        6. Duplicate feedback submission prevented.
+        7. Citizen disputes resolution -> verification_status='citizen_disputed', creates timeline event, does not mark verified.
+        8. Admin can view disputed cases in analytics summary.
+        9. Admin reviews dispute: can reopen ticket (status='in_progress') or uphold resolution (status='verified').
+        10. Missing before/after image handled gracefully.
+        """
+        from .models import Complaint, ComplaintStatus, ComplaintEvidence, CitizenFeedback, Notification
+        from django.utils import timezone
+
+        # Setup complaint
+        comp = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Leaking municipal tap",
+            description="Continuous water leakage near bus stop",
+            address="Shivaji Chowk corner",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.IN_PROGRESS,
+            assigned_staff=self.staff
+        )
+
+        # 1. Staff marks complaint as resolved
+        self.client.force_authenticate(user=self.staff)
+        res_resolve = self.client.post(f'/api/complaints/{comp.id}/update_status/', {
+            "status": "resolved",
+            "notes": "Replaced faulty tap valve. Leakage stopped."
+        })
+        self.assertEqual(res_resolve.status_code, 200)
+        comp.refresh_from_db()
+        self.assertEqual(comp.status, ComplaintStatus.RESOLVED)
+        self.assertEqual(comp.resolution_verification_status, 'pending_citizen_confirmation')
+
+        # 2. Citizen receives resolution confirmation notification
+        notifs = Notification.objects.filter(user=self.citizen, complaint=comp, notification_type='resolution_awaiting_confirmation')
+        self.assertTrue(notifs.exists())
+
+        # 3. Unauthorized User cannot submit feedback or dispute (BOLA check)
+        self.client.force_authenticate(user=self.other_citizen)
+        res_unauth = self.client.post(f'/api/complaints/{comp.id}/submit_feedback/', {
+            "rating": 5,
+            "feedback_text": "Looks good"
+        })
+        self.assertEqual(res_unauth.status_code, 403)
+
+        # 4. Rating Validation
+        self.client.force_authenticate(user=self.citizen)
+        res_invalid_rating = self.client.post(f'/api/complaints/{comp.id}/submit_feedback/', {
+            "rating": 6,
+            "feedback_text": "Great job"
+        })
+        self.assertEqual(res_invalid_rating.status_code, 400)
+
+        # 5. Citizen Confirms Resolution
+        res_confirm = self.client.post(f'/api/complaints/{comp.id}/submit_feedback/', {
+            "rating": 5,
+            "feedback_text": "Water valve replaced properly. Good service.",
+            "resolution_satisfaction": True,
+            "is_disputed": False
+        })
+        self.assertEqual(res_confirm.status_code, 201)
+        comp.refresh_from_db()
+        self.assertEqual(comp.status, ComplaintStatus.VERIFIED)
+        self.assertEqual(comp.resolution_verification_status, 'citizen_confirmed')
+
+        # 6. Duplicate Feedback Submission Prevented
+        res_dup = self.client.post(f'/api/complaints/{comp.id}/submit_feedback/', {
+            "rating": 4,
+            "feedback_text": "Changing my rating"
+        })
+        self.assertEqual(res_dup.status_code, 400)
+
+        # 7. Citizen Disputes Resolution Workflow
+        comp_dispute = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Pothole repair on main lane",
+            description="Deep crater damaging tires",
+            address="Lane 5, Shivaji Nagar",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.RESOLVED,
+            assigned_staff=self.staff,
+            resolution_verification_status='pending_citizen_confirmation'
+        )
+
+        res_dispute = self.client.post(f'/api/complaints/{comp_dispute.id}/submit_feedback/', {
+            "rating": 1,
+            "feedback_text": "Pothole was only covered with loose gravel, wash out occurred in rain.",
+            "is_disputed": True,
+            "dispute_reason": "Incomplete work, gravel washed away"
+        })
+        self.assertEqual(res_dispute.status_code, 201)
+        comp_dispute.refresh_from_db()
+        self.assertEqual(comp_dispute.resolution_verification_status, 'citizen_disputed')
+        # Crucial Rule: Status remains resolved/disputed, NOT verified
+        self.assertNotEqual(comp_dispute.status, ComplaintStatus.VERIFIED)
+
+        # Timeline event created
+        timeline_events = comp_dispute.timeline.filter(action="Resolution Disputed by Citizen")
+        self.assertTrue(timeline_events.exists())
+
+        # 8. Admin Analytics Reflects Disputed Case
+        self.client.force_authenticate(user=self.admin)
+        res_analytics = self.client.get('/api/analytics/summary/')
+        self.assertEqual(res_analytics.status_code, 200)
+        self.assertGreaterEqual(res_analytics.data.get("citizen_disputed_count", 0), 1)
+
+        # 9. Admin Review Action: Reopen Disputed Complaint
+        res_reopen = self.client.post(f'/api/complaints/{comp_dispute.id}/admin_review_dispute/', {
+            "decision": "reopen",
+            "notes": "Field inspection confirmed gravel washed out. Assigned back to staff for tar resurfacing."
+        })
+        self.assertEqual(res_reopen.status_code, 200)
+        comp_dispute.refresh_from_db()
+        self.assertEqual(comp_dispute.status, ComplaintStatus.IN_PROGRESS)
+        self.assertEqual(comp_dispute.resolution_verification_status, 'admin_review_required')
+
+    def test_smart_field_staff_assignment_and_workload_optimization(self):
+        """
+        Task 18 Tests:
+        - Department-compatible staff recommendation.
+        - Inactive staff exclusion.
+        - Workload comparison (active workload preference).
+        - Missing skills handling (neutral, not penalized).
+        - Missing staff location handling (neutral, not penalized).
+        - Invalid GPS coordinates handling.
+        - No eligible staff handling.
+        - Multiple alternative recommendations.
+        - Recommendation does not automatically assign staff.
+        - Admin approval required for recommendation endpoint and assignment.
+        - Actual assignment updates timeline and notifications.
+        - Unauthorised assignment rejected.
+        """
+        from .staff_assignment import StaffAssignmentService
+
+        # Setup departments
+        dept_water = Department.objects.create(name="Water Works", code="WATER_TEST", sla_hours=24)
+        dept_roads = Department.objects.create(name="Roads & Highways", code="ROADS_TEST", sla_hours=48)
+
+        # Candidate 1: Water dept, low workload (0), plumbing skills, near complaint (1 km away)
+        staff_water_1 = User.objects.create_user(
+            username="staff_ramesh",
+            role=UserRole.STAFF,
+            department=dept_water,
+            skills="pipeline,plumbing,water leakage",
+            latitude=19.0760,
+            longitude=72.8777,
+            is_active=True
+        )
+
+        # Candidate 2: Water dept, high workload (3 active tasks), generic skills
+        staff_water_2 = User.objects.create_user(
+            username="staff_suresh",
+            role=UserRole.STAFF,
+            department=dept_water,
+            skills="general maintenance",
+            latitude=19.0760,
+            longitude=72.8777,
+            is_active=True
+        )
+
+        # Candidate 3: Roads dept (incompatible department), 0 workload
+        staff_roads_1 = User.objects.create_user(
+            username="staff_vijay",
+            role=UserRole.STAFF,
+            department=dept_roads,
+            skills="tar,road roller,asphalt",
+            is_active=True
+        )
+
+        # Candidate 4: Inactive staff (must be excluded)
+        staff_inactive = User.objects.create_user(
+            username="staff_inactive_user",
+            role=UserRole.STAFF,
+            department=dept_water,
+            skills="pipeline,plumbing",
+            is_active=False
+        )
+
+        # Assign 3 active complaints to staff_water_2 to build workload
+        for i in range(3):
+            Complaint.objects.create(
+                citizen=self.citizen,
+                title=f"Water leak {i}",
+                description="Pipe burst water leakage",
+                address="Sector 1",
+                department=dept_water,
+                status=ComplaintStatus.IN_PROGRESS,
+                assigned_staff=staff_water_2
+            )
+
+        # Also assign 2 RESOLVED complaints to staff_water_1 (resolved must be excluded from workload)
+        for i in range(2):
+            Complaint.objects.create(
+                citizen=self.citizen,
+                title=f"Resolved leak {i}",
+                description="Repaired water valve",
+                address="Sector 2",
+                department=dept_water,
+                status=ComplaintStatus.RESOLVED,
+                assigned_staff=staff_water_1
+            )
+
+        # Target complaint for recommendation
+        target_complaint = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Severe pipeline burst near market",
+            description="Massive water leakage and pipe damage in main market area",
+            address="Main Market Road",
+            department=dept_water,
+            latitude=19.0800,
+            longitude=72.8800,
+            status=ComplaintStatus.SUBMITTED
+        )
+
+        # 1. Department-compatible recommendation & Workload preference
+        rec = StaffAssignmentService.recommend_staff_for_complaint(target_complaint)
+        self.assertTrue(rec["has_recommendation"])
+        # Top choice should be staff_water_1 (same department, 0 active workload, matched plumbing skills)
+        self.assertEqual(rec["recommended_staff_id"], staff_water_1.id)
+        self.assertTrue(rec["department_match"])
+        self.assertEqual(rec["active_workload"], 0)
+        self.assertTrue(rec["skill_match"])
+        self.assertIsNotNone(rec["distance_km"])
+        self.assertTrue(rec["requires_admin_approval"])
+
+        # 2. Inactive Staff Exclusion
+        all_candidate_ids = [rec["recommended_staff_id"]] + [alt["staff_id"] for alt in rec["alternative_staff"]]
+        self.assertNotIn(staff_inactive.id, all_candidate_ids)
+
+        # 3. Workload Comparison
+        workload_water_1 = StaffAssignmentService.get_active_workload(staff_water_1)
+        workload_water_2 = StaffAssignmentService.get_active_workload(staff_water_2)
+        self.assertEqual(workload_water_1, 0)
+        self.assertEqual(workload_water_2, 3)
+
+        # 4. Multiple Alternative Recommendations Present
+        self.assertGreaterEqual(len(rec["alternative_staff"]), 1)
+        alt_ids = [alt["staff_id"] for alt in rec["alternative_staff"]]
+        self.assertIn(staff_water_2.id, alt_ids)
+
+        # 5. Missing Skills Handling: Neutral score without penalizing candidate
+        staff_no_skills = User.objects.create_user(
+            username="staff_no_skills",
+            role=UserRole.STAFF,
+            department=dept_water,
+            is_active=True
+        )
+        skill_res = StaffAssignmentService.evaluate_skills(staff_no_skills, target_complaint)
+        self.assertFalse(skill_res["available"])
+        self.assertEqual(skill_res["score"], 0.5)
+
+        # 6. Missing Staff Location Handling: Proximity marked unavailable, not penalized
+        prox_res_no_staff_loc = StaffAssignmentService.evaluate_proximity(staff_no_skills, target_complaint)
+        self.assertFalse(prox_res_no_staff_loc["available"])
+        self.assertIsNone(prox_res_no_staff_loc["distance_km"])
+        self.assertEqual(prox_res_no_staff_loc["score"], 0.5)
+
+        # 7. Invalid GPS Coordinates Handling
+        complaint_invalid_gps = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Complaint with invalid GPS",
+            description="Road crater",
+            address="Unknown street",
+            latitude=150.0,  # Invalid latitude > 90
+            longitude=0.0
+        )
+        prox_invalid = StaffAssignmentService.evaluate_proximity(staff_water_1, complaint_invalid_gps)
+        self.assertFalse(prox_invalid["available"])
+        self.assertIsNone(prox_invalid["distance_km"])
+
+        # 8. No Eligible Staff Handling
+        rec_empty = StaffAssignmentService.recommend_staff_for_complaint(target_complaint, candidate_pool=[])
+        self.assertFalse(rec_empty["has_recommendation"])
+        self.assertIsNone(rec_empty["recommended_staff_id"])
+
+        # 9. Human-in-the-Loop Guarantee: Recommendation does NOT automatically assign staff
+        target_complaint.refresh_from_db()
+        self.assertIsNone(target_complaint.assigned_staff)
+        self.assertEqual(target_complaint.status, ComplaintStatus.SUBMITTED)
+
+        # 10. Admin Endpoint Protection: Non-admin citizen forbidden from recommendation endpoint
+        self.client.force_authenticate(user=self.citizen)
+        res_citizen_rec = self.client.get(f'/api/complaints/{target_complaint.id}/recommend_staff/')
+        self.assertEqual(res_citizen_rec.status_code, 403)
+
+        # 11. Admin Accesses Recommendation
+        self.client.force_authenticate(user=self.admin)
+        res_admin_rec = self.client.get(f'/api/complaints/{target_complaint.id}/recommend_staff/')
+        self.assertEqual(res_admin_rec.status_code, 200)
+        self.assertEqual(res_admin_rec.data["recommended_staff_id"], staff_water_1.id)
+
+        # 12. Unauthorised Assignment Rejected
+        self.client.force_authenticate(user=self.citizen)
+        res_unauth_assign = self.client.post(f'/api/complaints/{target_complaint.id}/assign_staff/', {
+            "staff_id": staff_water_1.id
+        })
+        self.assertEqual(res_unauth_assign.status_code, 403)
+
+        # 13. Authorized Assignment Updates Complaint, Timeline, and Sends Notification
+        self.client.force_authenticate(user=self.admin)
+        res_assign = self.client.post(f'/api/complaints/{target_complaint.id}/assign_staff/', {
+            "staff_id": staff_water_1.id
+        })
+        self.assertEqual(res_assign.status_code, 200)
+
+        target_complaint.refresh_from_db()
+        self.assertEqual(target_complaint.assigned_staff, staff_water_1)
+        self.assertEqual(target_complaint.status, ComplaintStatus.ASSIGNED)
+        self.assertIsNotNone(target_complaint.assigned_at)
+
+        # Check Timeline
+        timeline_entry = target_complaint.timeline.filter(action=f"Assigned to {staff_water_1.username}")
+        self.assertTrue(timeline_entry.exists())
+
+        # Check Staff Notification
+        staff_notif = Notification.objects.filter(user=staff_water_1, complaint=target_complaint, notification_type='staff_assigned')
+        self.assertTrue(staff_notif.exists())
+
+    def test_smart_civic_knowledge_assistant(self):
+        """
+        Task 19 Tests:
+        1. General civic guidance retrieval (steps, guidelines).
+        2. English, Hindi, and Hinglish query handling.
+        3. Authenticated user's own complaint status lookup.
+        4. Attempt to access another user's complaint (strictly restricted / forbidden).
+        5. Invalid or non-existent complaint ID.
+        6. Missing or empty message (validation error).
+        7. Gemini API failure and safe deterministic fallback.
+        8. Unknown civic information (handles gracefully without hallucinating).
+        9. Complaint filing guidance without automatic submission (no complaint created).
+        10. Unauthenticated personal complaint query (prompts login).
+        """
+        # Create a sample complaint owned by self.citizen
+        citizen_complaint = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Broken tap at water fountain",
+            description="Continuous clean water wastage at community park fountain",
+            address="Community Park Sector 4",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.IN_PROGRESS,
+            assigned_staff=self.staff
+        )
+
+        # Create another complaint owned by self.other_citizen
+        other_complaint = Complaint.objects.create(
+            citizen=self.other_citizen,
+            title="Garbage bin overflowing",
+            description="Commercial market waste dumped outside bin",
+            address="Market Yard Lane 2",
+            department=self.dept,
+            category=self.category,
+            status=ComplaintStatus.SUBMITTED
+        )
+
+        initial_complaints_count = Complaint.objects.count()
+
+        # 1. General civic guidance retrieval (Public/Unauthenticated allowed)
+        self.client.logout()
+        res_guidance = self.client.post('/api/assistant/chat/', {
+            "message": "How do I report water leakage?",
+            "language": "en"
+        })
+        self.assertEqual(res_guidance.status_code, 200)
+        self.assertIn("water", res_guidance.data["answer"].lower())
+        self.assertGreaterEqual(len(res_guidance.data["sources"]), 1)
+
+        # 2. English, Hindi, and Hinglish query handling
+        # Hindi query
+        res_hi = self.client.post('/api/assistant/chat/', {
+            "message": "कचरा उठाने की शिकायत कैसे दर्ज करें?"
+        })
+        self.assertEqual(res_hi.status_code, 200)
+        self.assertEqual(res_hi.data["language"], "hi")
+        self.assertIn("कचरा", res_hi.data["answer"])
+
+        # Hinglish query
+        res_hinglish = self.client.post('/api/assistant/chat/', {
+            "message": "Pothole ki complain kaise kare road par gaddha hai"
+        })
+        self.assertEqual(res_hinglish.status_code, 200)
+        self.assertEqual(res_hinglish.data["language"], "hinglish")
+
+        # 3. Authenticated user's own complaint status
+        self.client.force_authenticate(user=self.citizen)
+        res_own_comp = self.client.post('/api/assistant/chat/', {
+            "message": f"What is the status of my complaint {citizen_complaint.tracking_id}?",
+            "complaint_id": citizen_complaint.tracking_id
+        })
+        self.assertEqual(res_own_comp.status_code, 200)
+        self.assertIsNotNone(res_own_comp.data.get("related_complaint"))
+        self.assertEqual(res_own_comp.data["related_complaint"]["tracking_id"], citizen_complaint.tracking_id)
+        self.assertEqual(res_own_comp.data["related_complaint"]["status"], "in_progress")
+        self.assertIn(citizen_complaint.tracking_id, res_own_comp.data["answer"])
+
+        # 4. Attempt to access another user's complaint (Strict BOLA restriction)
+        res_unauthorized = self.client.post('/api/assistant/chat/', {
+            "message": f"Show details for {other_complaint.tracking_id}",
+            "complaint_id": other_complaint.tracking_id
+        })
+        self.assertEqual(res_unauthorized.status_code, 200)
+        self.assertIn("permission", res_unauthorized.data["answer"].lower())
+        self.assertIsNone(res_unauthorized.data.get("related_complaint"))
+
+        # 5. Invalid or non-existent complaint ID
+        res_invalid_id = self.client.post('/api/assistant/chat/', {
+            "message": "Check status of JSH-NONEXISTENT",
+            "complaint_id": "JSH-NONEXISTENT"
+        })
+        self.assertEqual(res_invalid_id.status_code, 200)
+        self.assertIn("No complaint found", res_invalid_id.data["answer"])
+        self.assertIsNone(res_invalid_id.data.get("related_complaint"))
+
+        # 6. Missing or empty message (validation error)
+        res_empty = self.client.post('/api/assistant/chat/', {"message": "   "})
+        self.assertEqual(res_empty.status_code, 400)
+        self.assertIn("empty", res_empty.data["error"])
+
+        # 7. Gemini API failure and safe deterministic fallback
+        with patch('api.gemini_client.call_gemini_safe', return_value=None):
+            res_fallback = self.client.post('/api/assistant/chat/', {
+                "message": "What does submitted status mean?"
+            })
+            self.assertEqual(res_fallback.status_code, 200)
+            self.assertIn("submitted", res_fallback.data["answer"].lower())
+            self.assertTrue(len(res_fallback.data["sources"]) > 0)
+
+        # 8. Unknown civic information (handles gracefully without hallucination)
+        res_unknown = self.client.post('/api/assistant/chat/', {
+            "message": "How do I apply for alien airspace passport?"
+        })
+        self.assertEqual(res_unknown.status_code, 200)
+        self.assertFalse(res_unknown.data.get("requires_human_support"))
+
+        # 9. Complaint filing guidance without automatic submission
+        res_filing_guide = self.client.post('/api/assistant/chat/', {
+            "message": "I want to file a complaint about broken streetlights on 5th cross."
+        })
+        self.assertEqual(res_filing_guide.status_code, 200)
+        # Ensure no new complaint record was silently created in database
+        self.assertEqual(Complaint.objects.count(), initial_complaints_count)
+        self.assertIn("/report", " ".join(res_filing_guide.data["suggested_actions"]) + res_filing_guide.data["answer"])
+
+        # 10. Unauthenticated personal complaint query prompts login
+        self.client.logout()
+        res_unauth = self.client.post('/api/assistant/chat/', {
+            "message": "Meri complaint ka status kya hai?"
+        })
+        self.assertEqual(res_unauth.status_code, 200)
+        self.assertIn("लॉगिन", res_unauth.data["answer"])
+        self.assertIsNone(res_unauth.data.get("related_complaint"))
+
+    def test_smart_predictive_civic_intelligence_and_preventive_action(self):
+        """
+        Task 20 Tests:
+        1. Historical daily, weekly, and monthly trends.
+        2. Category and department filtering.
+        3. Recurring issue detection.
+        4. Duplicate reports versus independent recurring incidents.
+        5. Forecast with sufficient historical data (>= 7 distinct days).
+        6. Forecast with insufficient historical data (< 7 days).
+        7. Missing historical days handling.
+        8. Hotspot risk calculation.
+        9. Risk score explanation and contributing factors.
+        10. Preventive recommendations generated with metrics.
+        11. Unauthorized citizen access (HTTP 403 Forbidden).
+        12. Invalid forecast horizon parameter handling (HTTP 400).
+        13. Missing/invalid GPS coordinates handling.
+        14. Gemini failure and deterministic fallback.
+        15. No personal information leakage in predictive analytics outputs.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+        from .predictive_intelligence import (
+            aggregate_historical_trends,
+            detect_recurring_problems,
+            calculate_complaint_volume_forecast,
+            calculate_hotspot_risk_scores,
+            generate_preventive_recommendations
+        )
+
+        # 11. Unauthorized Citizen Access Rejected
+        self.client.force_authenticate(user=self.citizen)
+        res_unauth = self.client.get('/api/analytics/predictive/trends/')
+        self.assertEqual(res_unauth.status_code, 403)
+
+        # Setup historical complaints spanning 10 days
+        self.client.force_authenticate(user=self.admin)
+        dept_water = Department.objects.create(name="Water Supply Dept", code="WATER_PRED", sla_hours=24)
+        cat_leak = ComplaintCategory.objects.create(name="Pipeline Leakage", slug="pipeline-leakage", department=dept_water)
+
+        now = timezone.now()
+        complaints_created = []
+
+        # Create complaints across 10 past days to test forecasting with sufficient data
+        for day_offset in range(10, 0, -1):
+            created_dt = now - timedelta(days=day_offset)
+            c = Complaint.objects.create(
+                citizen=self.citizen,
+                title=f"Water issue day {day_offset}",
+                description=f"Water supply disrupted in sector {day_offset}",
+                address=f"Street {day_offset}",
+                department=dept_water,
+                category=cat_leak,
+                status=ComplaintStatus.RESOLVED if day_offset > 3 else ComplaintStatus.IN_PROGRESS
+            )
+            # Override created_at to simulate historical dates
+            Complaint.objects.filter(id=c.id).update(created_at=created_dt)
+            complaints_created.append(c)
+
+        # Create a cluster of recurring complaints in the same location (near GPS 19.0760, 72.8777)
+        # 2 independent incidents and 1 duplicate report
+        c_orig = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Burst pipeline at chowk",
+            description="Water gushing on road",
+            address="Shivaji Chowk",
+            department=dept_water,
+            category=cat_leak,
+            latitude=19.0760,
+            longitude=72.8777,
+            status=ComplaintStatus.IN_PROGRESS
+        )
+        Complaint.objects.filter(id=c_orig.id).update(created_at=now - timedelta(days=5))
+
+        c_dup = Complaint.objects.create(
+            citizen=self.other_citizen,
+            title="Water pipe burst again",
+            description="Water gushing on road same place",
+            address="Shivaji Chowk",
+            department=dept_water,
+            category=cat_leak,
+            latitude=19.0761,
+            longitude=72.8778,
+            status=ComplaintStatus.IN_PROGRESS,
+            ai_duplicate_suspect=True,
+            duplicate_of=c_orig
+        )
+        Complaint.objects.filter(id=c_dup.id).update(created_at=now - timedelta(days=4))
+
+        c_reopen = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Second leak near chowk",
+            description="Another valve leaking at same spot",
+            address="Shivaji Chowk",
+            department=dept_water,
+            category=cat_leak,
+            latitude=19.0762,
+            longitude=72.8776,
+            status=ComplaintStatus.ESCALATED,
+            is_escalated=True
+        )
+        Complaint.objects.filter(id=c_reopen.id).update(created_at=now - timedelta(days=1))
+
+        # 1. Historical Daily, Weekly & Monthly Trends
+        res_trends = self.client.get('/api/analytics/predictive/trends/')
+        self.assertEqual(res_trends.status_code, 200)
+        self.assertGreaterEqual(len(res_trends.data["daily_trends"]), 7)
+        self.assertGreaterEqual(len(res_trends.data["weekly_trends"]), 1)
+        self.assertGreaterEqual(len(res_trends.data["monthly_trends"]), 1)
+        self.assertIn("category_distribution", res_trends.data)
+        self.assertIn("department_distribution", res_trends.data)
+
+        # 2. Category & Department Filtering
+        res_filtered = self.client.get(f'/api/analytics/predictive/trends/?category={cat_leak.id}')
+        self.assertEqual(res_filtered.status_code, 200)
+        for cat_item in res_filtered.data["category_distribution"]:
+            self.assertEqual(cat_item["category_name"], cat_leak.name)
+
+        # 3. Recurring Issue Detection & 4. Duplicate vs Independent Distinction
+        recurring = res_trends.data.get("recurring_problems", [])
+        self.assertGreaterEqual(len(recurring), 1)
+        chowk_recur = next((r for r in recurring if "Shivaji Chowk" in r["location_label"]), recurring[0])
+        self.assertEqual(chowk_recur["category_name"], cat_leak.name)
+        self.assertGreaterEqual(chowk_recur["total_complaint_count"], 2)
+        # Verify duplicate vs independent count distinction
+        self.assertGreaterEqual(chowk_recur["duplicate_reports_count"], 1)
+        self.assertGreaterEqual(chowk_recur["independent_incidents_count"], 1)
+
+        # 5. Forecast with Sufficient Historical Data (>= 7 distinct days)
+        res_forecast = self.client.get('/api/analytics/predictive/forecast/?horizon_days=7')
+        self.assertEqual(res_forecast.status_code, 200)
+        self.assertEqual(res_forecast.data["status"], "success")
+        self.assertEqual(len(res_forecast.data["predictions"]), 7)
+        self.assertIn("methodology", res_forecast.data)
+        self.assertTrue(res_forecast.data["predictions"][0]["is_estimate"])
+
+        # 6. Forecast with Insufficient Historical Data (< 7 days)
+        # Filter to a narrow 2-day date range using ISO date string YYYY-MM-DD
+        date_short = (now - timedelta(days=2)).strftime("%Y-%m-%d")
+        res_insufficient = self.client.get(f'/api/analytics/predictive/forecast/?date_from={date_short}')
+        self.assertEqual(res_insufficient.status_code, 200)
+        self.assertEqual(res_insufficient.data["status"], "insufficient_data")
+        self.assertIn("Insufficient historical data", res_insufficient.data["message"])
+
+        # 7. Missing Historical Days Handling
+        # Verify predictions handle missing days without throwing errors
+        forecast_sparse = calculate_complaint_volume_forecast(Complaint.objects.filter(department=dept_water))
+        self.assertIn("predictions", forecast_sparse)
+
+        # 8. Hotspot Risk Calculation & 9. Risk Factors Explanation
+        res_hotspots = self.client.get('/api/analytics/predictive/hotspots/')
+        self.assertEqual(res_hotspots.status_code, 200)
+        hotspot_list = res_hotspots.data["hotspot_risk_scores"]
+        self.assertGreaterEqual(len(hotspot_list), 1)
+        top_hs = hotspot_list[0]
+        self.assertGreaterEqual(top_hs["risk_score"], 0.0)
+        self.assertLessEqual(top_hs["risk_score"], 100.0)
+        self.assertIn(top_hs["risk_level"], ["low", "medium", "high"])
+        self.assertGreaterEqual(len(top_hs["contributing_factors"]), 1)
+
+        # 10. Preventive Action Recommendations with Supporting Metrics
+        res_recs = self.client.get('/api/analytics/predictive/recommendations/')
+        self.assertEqual(res_recs.status_code, 200)
+        recs = res_recs.data["recommendations"]
+        self.assertGreaterEqual(len(recs), 1)
+        self.assertIn("suggested_action", recs[0])
+        self.assertIn("supporting_metric", recs[0])
+        self.assertIn("confidence_level", recs[0])
+
+        # 12. Invalid Horizon Parameter Handling (HTTP 400)
+        res_bad_horizon = self.client.get('/api/analytics/predictive/forecast/?horizon_days=999')
+        self.assertEqual(res_bad_horizon.status_code, 400)
+        self.assertIn("horizon", res_bad_horizon.data["error"].lower())
+
+        # 13. Missing GPS Coordinates: Non-GPS complaints do not crash hotspot scoring
+        c_no_gps = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Non GPS leak",
+            description="Address only",
+            address="Vague street",
+            department=dept_water,
+            category=cat_leak,
+            latitude=None,
+            longitude=None
+        )
+        hs_scores = calculate_hotspot_risk_scores(Complaint.objects.filter(id=c_no_gps.id))
+        self.assertEqual(len(hs_scores), 0)
+
+        # 14. Gemini Failure and Safe Deterministic Fallback
+        with patch('api.gemini_client.call_gemini_safe', return_value=None):
+            recs_fallback = generate_preventive_recommendations(
+                Complaint.objects.all(),
+                hotspots=hotspot_list,
+                recurring_problems=recurring
+            )
+            self.assertGreaterEqual(len(recs_fallback), 1)
+
+        # 15. No Personal Information Leakage in Predictive Outputs
+        serialized_str = str(res_trends.data) + str(res_forecast.data) + str(res_hotspots.data) + str(res_recs.data)
+        self.assertNotIn("testcitizen", serialized_str)
+        self.assertNotIn("testpassword", serialized_str)
+        self.assertNotIn("admin@test.com", serialized_str)
+
+
+
+
+
+
+
+
 
 
 

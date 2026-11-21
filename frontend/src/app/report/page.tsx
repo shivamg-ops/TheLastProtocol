@@ -48,6 +48,9 @@ export default function InteractiveChatReportPage() {
   const [currentDiagnosis, setCurrentDiagnosis] = useState<any>(null);
   const [categories, setCategories] = useState<any[]>([]);
 
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("hi-IN"); // hi-IN, mr-IN, en-IN
+  const [confirmedByCitizen, setConfirmedByCitizen] = useState<boolean>(false);
+
   // Draft Confirmation Form States
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -137,7 +140,7 @@ export default function InteractiveChatReportPage() {
     recognition.continuous = true; // KEEP RECORDING until user stops or finishes speaking
     recognition.interimResults = true; // Show live interim words as they speak
     recognition.maxAlternatives = 1;
-    recognition.lang = "hi-IN"; // Accurately captures Hindi, Hinglish and English in India locale
+    recognition.lang = selectedLanguage; // Configurable: Hindi (hi-IN), Marathi (mr-IN), or English/Hinglish (en-IN)
 
     let finalTranscript = "";
 
@@ -303,6 +306,12 @@ export default function InteractiveChatReportPage() {
     if (!token) {
       alert("Please sign in or use demo login to register complaint.");
       router.push("/login");
+      return;
+    }
+
+    // Task 16: Require explicit citizen confirmation before submitting
+    if (!confirmedByCitizen) {
+      alert("Please check the confirmation box to verify that your complaint draft details are accurate.");
       return;
     }
 
@@ -584,6 +593,18 @@ export default function InteractiveChatReportPage() {
                   <Camera className="w-5 h-5" />
                 </button>
 
+                {/* Speech Input Language Selector */}
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="px-1.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:border-[#A94D37]"
+                  title="Select voice recognition language"
+                >
+                  <option value="hi-IN">हिन्दी / Hinglish</option>
+                  <option value="mr-IN">मराठी (Marathi)</option>
+                  <option value="en-IN">English (India)</option>
+                </select>
+
                 <button
                   type="button"
                   onClick={toggleVoiceRecording}
@@ -592,7 +613,7 @@ export default function InteractiveChatReportPage() {
                       ? "bg-red-500 text-white shadow-lg animate-pulse"
                       : "text-gray-600 hover:text-[#A94D37] hover:bg-gray-100"
                   }`}
-                  title={isListening ? "Stop Recording" : "Record Speech (Hindi / Marathi / English)"}
+                  title={isListening ? "Stop Recording" : `Record Speech (${selectedLanguage})`}
                 >
                   {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                 </button>
@@ -775,10 +796,25 @@ export default function InteractiveChatReportPage() {
                       </div>
                     )}
 
+                    {/* Explicit Citizen Confirmation Checkbox (Requirement 6) */}
+                    <div className="pt-2 border-t border-gray-100">
+                      <label className="flex items-start gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={confirmedByCitizen}
+                          onChange={(e) => setConfirmedByCitizen(e.target.checked)}
+                          className="mt-0.5 rounded border-gray-300 text-[#A94D37] focus:ring-[#A94D37]"
+                        />
+                        <span className="text-[11px] text-gray-700 leading-tight">
+                          I have verified that the problem description and location are accurate, and I confirm the submission of this complaint.
+                        </span>
+                      </label>
+                    </div>
+
                     <button
                       type="submit"
-                      disabled={submitting}
-                      className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 mt-2"
+                      disabled={submitting || !confirmedByCitizen}
+                      className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 mt-2"
                     >
                       {submitting ? "Submitting Ticket & Uploading Evidence..." : "Confirm & Submit Complaint"} <ArrowRight className="w-3.5 h-3.5" />
                     </button>

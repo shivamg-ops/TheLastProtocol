@@ -109,31 +109,38 @@ def extract_location_entities(full_text: str, detected_lang: str = "en") -> dict
             extracted_locations.append(candidate)
             has_specific_indicator = True
 
-    # Patterns for English / Hinglish:
-    # (A) Keyword based: near, opposite, behind, in front of, next to, beside, at
+    # (B) Keyword based: near, opposite, behind, in front of, next to, beside, at, on
     en_matches = re.findall(
-        r'\b(?:near|opp(?:osite)?|behind|in\s*front\s*of|next\s*to|beside|at)\s+([A-Za-z0-9\s,-]{3,35}?)(?=\s+(?:and|is|are|very|since|se|par|me|ko|hai|ho|badboo|kooda|paani|overflow|causing|ward|\.|\,|$))',
+        r'\b(?:near|opp(?:osite)?|behind|in\s*front\s*of|next\s*to|beside|at|on)\s+([A-Za-z0-9\s,-]{3,35}?)(?=\s+(?:near\s+|behind\s+|in\s*front\s*of|and\s+|is\s+|are\s+|very\s+|since\s+|se\s+|par\s+|me\s+|ko\s+|hai\b|ho\b|badboo\b|kooda\b|paani\b|overflow\b|causing\b|ward\b|\.|\,|$))',
         text_clean,
         re.IGNORECASE
     )
     for match in en_matches:
         candidate = match.strip(" ,.-")
         if candidate and not any(v in candidate.lower() for v in ['my house', 'our area', 'my street', 'here', 'road', 'gali']):
-            extracted_locations.append(candidate)
-            has_specific_indicator = True
+            if not any(candidate in existing or existing in candidate for existing in extracted_locations):
+                extracted_locations.append(candidate)
+                has_specific_indicator = True
 
-    # (B) Named places: "X Road", "Y Street", "Z Nagar", "W Chowk", "V Colony", "U Sector", "T Hospital", "S School", "R Market"
+    # (A) Named places: "5th Main Road", "Y Street", "Z Nagar", "W Chowk", "V Colony", "U Sector", "T Hospital", "S School", "R Market", "Metro Station"
     named_en = re.findall(
-        r'\b(?:on|in|at)?\s*([0-9A-Za-z\s]{2,25}\s+(?:Chowk|Nagar|Colony|Apartment|Complex|Hospital|School|College|Station|Metro|Market|Mall|Bazaar|Sector\s*\d+|Road|Street|Avenue|Lane|Marg))\b',
+        r'\b([0-9A-Za-z]+(?:\s+[0-9A-Za-z]+){0,3}\s+(?:Chowk|Nagar|Colony|Apartment|Complex|Hospital|School|College|Station|Market\s*Yard|Market|Mall|Bazaar|Sector\s*\d+|Road|Street|Avenue|Lane|Marg))\b',
         text_clean,
         re.IGNORECASE
     )
     for match in named_en:
         candidate = match.strip(" ,.-")
-        candidate = re.sub(r'^(?:pothole|crater|leakage|water|sewage|wire|dark|streetlight|light|garbage|waste)\s*(?:on|in|at)?\s*', '', candidate, flags=re.IGNORECASE).strip()
-        if len(candidate) >= 4 and not any(cand in candidate for cand in extracted_locations):
-            extracted_locations.append(candidate)
-            has_specific_indicator = True
+        candidate = re.sub(r'^(?:pothole|crater|leakage|water|sewage|wire|dark|streetlight|light|garbage|waste|pipe|broken)\s*(?:on|in|at)?\s*', '', candidate, flags=re.IGNORECASE).strip()
+        if len(candidate) >= 4:
+            # Replace sub-fragment if candidate is more specific (e.g. '5th Main Road' over 'Main Road')
+            for i, ex in enumerate(extracted_locations):
+                if ex in candidate and ex != candidate:
+                    extracted_locations[i] = candidate
+                    candidate = None
+                    break
+            if candidate and not any(cand in candidate for cand in extracted_locations):
+                extracted_locations.append(candidate)
+                has_specific_indicator = True
 
     # Filter out empty or duplicate candidates
     final_locations = []
@@ -268,7 +275,7 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
 
         # 6. Water Supply (Potable / Pipe Supply)
         elif any(w in text_lower or w in full_text for w in [
-            'water supply', 'drinking water', 'pipeline', 'tap water', 'water burst', 'low pressure',
+            'water supply', 'drinking water', 'pipeline', 'pipe', 'tap water', 'water burst', 'low pressure',
             'जल', 'पाणी', 'पेयजल', 'पाइप', 'नळ', 'jal', 'peene ka paani', 'pipe burst'
         ]):
             category = "Water Supply"

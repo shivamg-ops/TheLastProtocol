@@ -21,6 +21,10 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     preferred_language = models.CharField(max_length=10, default='en') # en, hi, mr, hinglish
     organization_name = models.CharField(max_length=200, blank=True, null=True)
+    department = models.ForeignKey('Department', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members')
+    skills = models.CharField(max_length=255, blank=True, null=True, help_text="Comma-separated verified skills e.g. 'pipeline,leakage,plumbing'")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, help_text="Official assigned base station / field station latitude")
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, help_text="Official assigned base station / field station longitude")
     address = models.TextField(blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -105,6 +109,20 @@ class Complaint(models.Model):
     sla_target_date = models.DateTimeField(null=True, blank=True)
     is_escalated = models.BooleanField(default=False)
     escalation_reason = models.TextField(blank=True, null=True)
+    
+    # Task 17: Resolution Verification State
+    # 'pending_citizen_confirmation', 'citizen_confirmed', 'citizen_disputed', 'admin_review_required'
+    resolution_verification_status = models.CharField(
+        max_length=40,
+        default='not_resolved',
+        choices=[
+            ('not_resolved', 'Not Resolved'),
+            ('pending_citizen_confirmation', 'Pending Citizen Confirmation'),
+            ('citizen_confirmed', 'Citizen Confirmed'),
+            ('citizen_disputed', 'Citizen Disputed'),
+            ('admin_review_required', 'Admin Review Required')
+        ]
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -162,6 +180,8 @@ class CitizenFeedback(models.Model):
     rating = models.PositiveSmallIntegerField(choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')])
     feedback_text = models.TextField(blank=True)
     resolution_satisfaction = models.BooleanField(default=True)
+    is_disputed = models.BooleanField(default=False)
+    dispute_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 class Subscription(models.Model):
