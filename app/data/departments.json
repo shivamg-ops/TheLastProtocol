@@ -1,0 +1,78 @@
+
+{
+    "organisation_name": "JanSahayak Demo Organisation",
+    "departments": [
+        {
+            "id": "DEPT001",
+            "name": "Sanitation Department",
+            "categories": [
+                "Garbage Collection"
+            ],
+            "keywords": [
+                "garbage",
+                "waste",
+                "dustbin",
+                "rubbish",
+                "kachra",
+                "cleaning",
+                "safai"
+            ]
+        },
+        {
+            "id": "DEPT002",
+            "name": "Road Maintenance Department",
+            "categories": [
+                "Roads and Potholes"
+            ],
+            "keywords": [
+                "pothole",
+                "road",
+                "street damage",
+                "khadda",
+                "sadak"
+            ]
+        },
+        {
+            "id": "DEPT003",
+            "name": "Water Supply Department",
+            "categories": [
+                "Water Supply"
+            ],
+            "keywords": [
+                "water",
+                "pipeline",
+                "water shortage",
+                "leakage",
+                "pani"
+            ]
+        },
+        {
+            "id": "DEPT004",
+            "name": "Drainage Department",
+            "categories": [
+                "Drainage and Sewage"
+            ],
+            "keywords": [
+                "drainage",
+                "sewage",
+                "blocked drain",
+                "gutter",
+                "nala"
+            ]
+        },
+        {
+            "id": "DEPT005",
+            "name": "Electrical Department",
+            "categories": [
+                "Streetlights"
+            ],
+            "keywords": [
+                "streetlight",
+                "electricity",
+                "light",
+                "lamp",
+                "street light"
+            ]
+        }
+    ]
+}
