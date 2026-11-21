@@ -165,8 +165,8 @@ export default function InteractiveChatReportPage() {
       recognition.maxAlternatives = 1;
       recognition.lang = selectedLanguage || "hi-IN";
 
-      // Store initial text so incoming speech is appended smoothly
-      const baseText = inputText.trim() ? inputText.trim() + " " : "";
+      // Track confirmed final transcript segments cleanly
+      let committedText = inputText.trim() ? inputText.trim() + " " : "";
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -175,21 +175,20 @@ export default function InteractiveChatReportPage() {
 
       recognition.onresult = (event: any) => {
         let interimText = "";
-        let newFinalText = "";
 
-        for (let i = 0; i < event.results.length; ++i) {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
           const transcriptChunk = res[0]?.transcript || "";
           if (res.isFinal) {
-            newFinalText += transcriptChunk + " ";
+            committedText += transcriptChunk.trim() + " ";
           } else {
             interimText += transcriptChunk;
           }
         }
 
-        const fullRecognized = (baseText + newFinalText + interimText).trim();
-        if (fullRecognized) {
-          setInputText(fullRecognized);
+        const displayText = (committedText + interimText).trim();
+        if (displayText) {
+          setInputText(displayText);
           setHasUsedVoice(true);
         }
       };
