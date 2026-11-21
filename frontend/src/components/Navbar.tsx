@@ -2,25 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Mic,
-  ChevronDown,
-  Shield,
-  Briefcase,
-  Users,
-  LogOut,
-  Sparkles,
-  LayoutDashboard,
-  Search,
-} from "lucide-react";
-import { useEffect, useState, useRef } from "react";
+import { Mic, LogOut, LayoutDashboard } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
-  const [portalsOpen, setPortalsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -31,14 +19,6 @@ export default function Navbar() {
     } catch {
       // ignore
     }
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setPortalsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleLogout = () => {
@@ -46,6 +26,13 @@ export default function Navbar() {
     localStorage.removeItem("user");
     setUser(null);
     router.push("/login");
+  };
+
+  // Determine user's specific portal path based on their role
+  const getDashboardPath = (role?: string) => {
+    if (role === "admin") return "/admin";
+    if (role === "staff") return "/staff";
+    return "/citizen";
   };
 
   return (
@@ -69,8 +56,8 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Clean Public Navigation Links */}
-          <div className="hidden md:flex items-center space-x-7 text-xs font-semibold tracking-wide">
+          {/* Clean Public Navigation Links (Standard SaaS) */}
+          <div className="hidden md:flex items-center space-x-8 text-xs font-semibold tracking-wide">
             <Link
               href="/"
               className={`transition hover:text-white ${
@@ -94,85 +81,23 @@ export default function Navbar() {
               How It Works
             </Link>
 
-            {/* Quick Track link */}
-            <Link
-              href="/citizen"
-              className={`flex items-center gap-1.5 transition hover:text-white ${
-                pathname.startsWith("/citizen") ? "text-[#A94D37]" : "text-gray-300"
-              }`}
-            >
-              <Search className="w-3.5 h-3.5 text-gray-400" /> Track Status
-            </Link>
-
-            {/* Portals Dropdown */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setPortalsOpen(!portalsOpen)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-800 border border-gray-700/80 text-gray-200 text-xs font-semibold transition"
+            {/* If user is logged in, show their personal Dashboard link */}
+            {user && (
+              <Link
+                href={getDashboardPath(user.role)}
+                className={`flex items-center gap-1.5 transition hover:text-white ${
+                  pathname.startsWith(getDashboardPath(user.role))
+                    ? "text-[#A94D37]"
+                    : "text-gray-300"
+                }`}
               >
-                <span>Workspaces</span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    portalsOpen ? "rotate-180 text-[#A94D37]" : "text-gray-400"
-                  }`}
-                />
-              </button>
-
-              {portalsOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-[#1f2329] border border-gray-700 rounded-xl shadow-2xl py-2 z-50 text-xs animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                    Role-Based Portals
-                  </div>
-
-                  <Link
-                    href="/citizen"
-                    onClick={() => setPortalsOpen(false)}
-                    className="flex items-start gap-3 px-3.5 py-2.5 hover:bg-gray-800 transition text-gray-200 group"
-                  >
-                    <div className="p-1.5 rounded-lg bg-blue-950/60 text-blue-400 group-hover:bg-blue-900 transition">
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-white">Citizen Portal</div>
-                      <div className="text-[11px] text-gray-400">File & track community issues</div>
-                    </div>
-                  </Link>
-
-                  <Link
-                    href="/staff"
-                    onClick={() => setPortalsOpen(false)}
-                    className="flex items-start gap-3 px-3.5 py-2.5 hover:bg-gray-800 transition text-gray-200 group"
-                  >
-                    <div className="p-1.5 rounded-lg bg-amber-950/60 text-amber-400 group-hover:bg-amber-900 transition">
-                      <Briefcase className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-white">Staff Workspace</div>
-                      <div className="text-[11px] text-gray-400">Field tasks & resolution proof</div>
-                    </div>
-                  </Link>
-
-                  <Link
-                    href="/admin"
-                    onClick={() => setPortalsOpen(false)}
-                    className="flex items-start gap-3 px-3.5 py-2.5 hover:bg-gray-800 transition text-gray-200 group border-t border-gray-800/80"
-                  >
-                    <div className="p-1.5 rounded-lg bg-red-950/60 text-[#A94D37] group-hover:bg-red-900 transition">
-                      <Shield className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-white">Admin Command</div>
-                      <div className="text-[11px] text-gray-400">SLAs, triage & department dispatch</div>
-                    </div>
-                  </Link>
-                </div>
-              )}
-            </div>
+                <LayoutDashboard className="w-3.5 h-3.5 text-[#A94D37]" /> Dashboard
+              </Link>
+            )}
           </div>
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-3">
-            {/* Primary Report CTA Button */}
             <Link
               href="/report"
               className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-[#A94D37] to-[#8e3e2b] hover:opacity-95 text-white text-xs font-semibold rounded-lg shadow-sm transition"
