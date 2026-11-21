@@ -112,7 +112,7 @@ export default function InteractiveChatReportPage() {
   };
 
   // Robust Multilingual Web Speech API Implementation
-  const toggleVoiceRecording = () => {
+  const toggleVoiceRecording = async () => {
     setSpeechError(null);
 
     // If currently listening, manually stop
@@ -128,66 +128,100 @@ export default function InteractiveChatReportPage() {
       return;
     }
 
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      setSpeechError("Speech recognition is not supported in this browser. Please use Google Chrome or Edge.");
-      return;
-    }
+    if (typeof window === "undefined") return;
 
+    // Check browser speech recognition API support
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true; // KEEP RECORDING until user stops or finishes speaking
-    recognition.interimResults = true; // Show live interim words as they speak
-    recognition.maxAlternatives = 1;
-    recognition.lang = selectedLanguage; // Configurable: Hindi (hi-IN), Marathi (mr-IN), or English/Hinglish (en-IN)
+    if (!SpeechRecognition) {
+      setSpeechError(
+        "Voice input / Web Speech API is not supported in this browser. For voice input, please open this page in Google Chrome or Microsoft Edge."
+      );
+      return;
+    }
 
-    let finalTranscript = "";
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setSpeechError(null);
-    };
-
-    recognition.onresult = (event: any) => {
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcriptPart = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcriptPart + " ";
-        } else {
-          interimTranscript += transcriptPart;
-        }
+    // Explicitly prompt / verify microphone permission so browser doesn't silently ignore audio
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Release immediate test stream track right away
+        stream.getTracks().forEach((track) => track.stop());
       }
-
-      const activeText = finalTranscript + interimTranscript;
-      if (activeText.trim()) {
-        setInputText(activeText);
-        setHasUsedVoice(true);
+    } catch (permErr: any) {
+      console.warn("Microphone permission check warning:", permErr);
+      if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
+        setSpeechError(
+          "Microphone permission blocked. Please click the lock/camera icon in your browser address bar and allow Microphone access."
+        );
+        return;
       }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.warn("Speech recognition error:", event.error);
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        setSpeechError("Microphone permission denied. Please allow microphone access in your browser address bar.");
-      } else if (event.error === "no-speech") {
-        // Just brief silence, don't crash
-      } else {
-        setSpeechError(`Voice input error: ${event.error}`);
-      }
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
+    }
 
     try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.lang = selectedLanguage || "hi-IN";
+
+      // Store initial text so incoming speech is appended smoothly
+      const baseText = inputText.trim() ? inputText.trim() + " " : "";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setSpeechError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let interimText = "";
+        let newFinalText = "";
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          const transcriptChunk = res[0]?.transcript || "";
+          if (res.isFinal) {
+            newFinalText += transcriptChunk + " ";
+          } else {
+            interimText += transcriptChunk;
+          }
+        }
+
+        const fullRecognized = (baseText + newFinalText + interimText).trim();
+        if (fullRecognized) {
+          setInputText(fullRecognized);
+          setHasUsedVoice(true);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setSpeechError(
+            "Microphone permission denied. Please allow microphone access in your browser address bar."
+          );
+        } else if (event.error === "network") {
+          setSpeechError(
+            "Voice speech service network error. If using Chrome, please check your internet connection or type your grievance."
+          );
+        } else if (event.error === "no-speech") {
+          // Normal brief pause, do not kill session or error
+          return;
+        } else {
+          setSpeechError(`Voice input alert: ${event.error}. You can also type directly in the box below.`);
+        }
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
       recognition.start();
       recognitionRef.current = recognition;
     } catch (err: any) {
-      console.error("Recognition start failed:", err);
+      console.error("Recognition start exception:", err);
+      setSpeechError("Could not start voice recognition. Please verify microphone settings or type directly.");
       setIsListening(false);
     }
   };
