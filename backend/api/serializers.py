@@ -3,7 +3,7 @@ from .models import (
     User, Department, ComplaintCategory, Complaint,
     ComplaintEvidence, ComplaintTimeline, Notification, CitizenFeedback, Subscription
 )
-from .validators import get_file_type_from_file
+from .validators import get_file_type_from_file, validate_evidence_file
 
 class UserSerializer(serializers.ModelSerializer):
     department_name = serializers.ReadOnlyField(source='department.name')
@@ -67,6 +67,7 @@ class ComplaintEvidenceSerializer(serializers.ModelSerializer):
         file = attrs.get('file')
         file_type = attrs.get('file_type')
         if file:
+            validate_evidence_file(file)
             inferred_type = get_file_type_from_file(file)
             # If file_type wasn't provided or defaulted inappropriately, use inferred type
             if not file_type or file_type != inferred_type:

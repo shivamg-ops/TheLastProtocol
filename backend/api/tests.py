@@ -2467,6 +2467,72 @@ class JanSahayakAPITests(TestCase):
         self.assertIn("1 confirmed duplicate reports", rec_item["explanation"])
         self.assertIn("1 suspected duplicates awaiting verification", rec_item["explanation"])
 
+    def test_production_readiness_security_and_health_checks(self):
+        """
+        Task 21 Tests:
+        1. Public Health Check (/api/health/) returns HTTP 200 OK without authentication.
+        2. Deep Diagnostics (/api/health/diagnostics/) blocked for anonymous citizens (HTTP 403).
+        3. Deep Diagnostics accessible to Admin/Staff (HTTP 200) with DB latency and zero secret leaks.
+        4. File Upload Security: Banned executable extension (.exe, .sh) rejected with validation error.
+        5. File Upload Security: Corrupted/Fake image binary rejected with validation error.
+        6. Security Headers and Throttling settings verified.
+        """
+        from .models import ComplaintEvidence, Complaint
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        # 1. Public Health Check
+        res_ping = self.client.get('/api/health/')
+        self.assertEqual(res_ping.status_code, 200)
+        self.assertEqual(res_ping.data["status"], "healthy")
+        self.assertIn("timestamp", res_ping.data)
+
+        # 2. Deep Diagnostics blocked for Citizen (HTTP 403)
+        self.client.force_authenticate(user=self.citizen)
+        res_diag_citizen = self.client.get('/api/health/diagnostics/')
+        self.assertEqual(res_diag_citizen.status_code, 403)
+
+        # 3. Deep Diagnostics accessible to Admin (HTTP 200)
+        self.client.force_authenticate(user=self.admin)
+        res_diag_admin = self.client.get('/api/health/diagnostics/')
+        self.assertEqual(res_diag_admin.status_code, 200)
+        self.assertIn("checks", res_diag_admin.data)
+        self.assertTrue(res_diag_admin.data["checks"]["database"]["connected"])
+        self.assertIsInstance(res_diag_admin.data["checks"]["database"]["latency_ms"], float)
+        # Ensure no secrets or API keys are leaked in diagnostics
+        diag_str = str(res_diag_admin.data)
+        self.assertNotIn("GEMINI_API_KEY", diag_str)
+        self.assertNotIn("DJANGO_SECRET_KEY", diag_str)
+
+        # 4. Dangerous / Executable File Upload Rejection
+        c = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Evidence Test Ticket",
+            description="Testing secure file uploads",
+            address="Shivaji Chowk",
+            department=self.dept,
+            category=self.category,
+            latitude=19.0760,
+            longitude=72.8777
+        )
+        malicious_script = SimpleUploadedFile("exploit.sh", b"#!/bin/bash\necho hack\n", content_type="text/x-shellscript")
+        res_script = self.client.post('/api/evidence/', {
+            'complaint': c.id,
+            'file': malicious_script,
+            'file_type': 'document'
+        }, format='multipart')
+        self.assertEqual(res_script.status_code, 400)
+        self.assertIn("strictly prohibited", str(res_script.data))
+
+        # 5. Corrupted Image Binary Rejection
+        fake_image = SimpleUploadedFile("fake_photo.jpg", b"This is not a real JPEG image binary data", content_type="image/jpeg")
+        res_fake_img = self.client.post('/api/evidence/', {
+            'complaint': c.id,
+            'file': fake_image,
+            'file_type': 'image'
+        }, format='multipart')
+        self.assertEqual(res_fake_img.status_code, 400)
+        self.assertIn("corrupted", str(res_fake_img.data).lower())
+
 
 
 

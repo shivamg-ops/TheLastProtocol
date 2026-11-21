@@ -1,3 +1,4 @@
+import os
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -861,4 +862,86 @@ class CivicAssistantViewSet(viewsets.GenericViewSet):
             requested_language=language
         )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class HealthCheckView(viewsets.GenericViewSet):
+    """
+    Task 21: Production Health Check & Monitoring
+    - /api/health/ : Lightweight public status check for load balancers & orchestrators.
+    - /api/health/diagnostics/ : Deep system diagnostics (DB ping, storage access, AI status)
+      strictly restricted to Admin/Staff to prevent reconnaissance.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['get'])
+    def ping(self, request):
+        return Response({
+            "status": "healthy",
+            "service": "JanSahayak Civic Platform",
+            "timestamp": timezone.now().isoformat()
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def diagnostics(self, request):
+        # Sensitive operational metrics are restricted to authenticated staff/admin
+        if not request.user.is_authenticated or (request.user.role != UserRole.ADMIN and not request.user.is_staff):
+            return Response(
+                {"error": "Access denied. Diagnostic telemetry requires administrative credentials."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        import time
+        from django.db import connection
+
+        # 1. Database Ping & Latency
+        db_ok = False
+        db_latency_ms = None
+        try:
+            t0 = time.perf_counter()
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                row = cursor.fetchone()
+                if row and row[0] == 1:
+                    db_ok = True
+            db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+        except Exception:
+            db_ok = False
+
+        # 2. Storage write/read check
+        storage_ok = False
+        try:
+            from django.conf import settings
+            test_path = os.path.join(settings.MEDIA_ROOT, '.health_check_tmp')
+            os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+            with open(test_path, 'w') as f:
+                f.write('health_check')
+            if os.path.exists(test_path):
+                os.remove(test_path)
+                storage_ok = True
+        except Exception:
+            storage_ok = False
+
+        # 3. AI Service status (safe check, no secrets exposed)
+        gemini_configured = bool(os.environ.get('GEMINI_API_KEY', '').strip())
+
+        overall_status = "healthy" if (db_ok and storage_ok) else "degraded"
+
+        return Response({
+            "status": overall_status,
+            "checks": {
+                "database": {
+                    "connected": db_ok,
+                    "latency_ms": db_latency_ms
+                },
+                "media_storage": {
+                    "writable": storage_ok
+                },
+                "ai_service": {
+                    "provider": "Google Gemini",
+                    "configured": gemini_configured,
+                    "mode": "hybrid-fallback" if gemini_configured else "rule-engine"
+                }
+            },
+            "timestamp": timezone.now().isoformat()
+        }, status=status.HTTP_200_OK if overall_status == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE)
 

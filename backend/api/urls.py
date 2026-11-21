@@ -5,7 +5,7 @@ from .views import (
     RegisterView, UserProfileView, DepartmentViewSet,
     ComplaintCategoryViewSet, ComplaintViewSet, AIAnalysisView,
     EvidenceUploadView, AnalyticsViewSet, NotificationViewSet,
-    CivicAssistantViewSet, AuthOTPViewSet
+    CivicAssistantViewSet, AuthOTPViewSet, HealthCheckView
 )
 
 router = DefaultRouter()
@@ -22,6 +22,8 @@ router.register(r'assistant', CivicAssistantViewSet, basename='assistant')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('health/', HealthCheckView.as_view({'get': 'ping'}), name='health_ping'),
+    path('health/diagnostics/', HealthCheckView.as_view({'get': 'diagnostics'}), name='health_diagnostics'),
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('user/me/', UserProfileView.as_view({'get': 'me'}), name='user_me'),
