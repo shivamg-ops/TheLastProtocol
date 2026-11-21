@@ -10,13 +10,10 @@ import {
   MicOff,
   Send,
   Camera,
-  Image as ImageIcon,
   Sparkles,
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
-  MapPin,
-  Clock,
   RotateCcw,
   User,
   Bot,
@@ -39,6 +36,7 @@ export default function InteractiveChatReportPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -60,6 +58,7 @@ export default function InteractiveChatReportPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Initial welcome greeting
   useEffect(() => {
@@ -76,6 +75,16 @@ export default function InteractiveChatReportPage() {
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+    };
   }, []);
 
   // Auto-scroll chat to latest message
@@ -93,36 +102,70 @@ export default function InteractiveChatReportPage() {
     }
   };
 
-  // Web Speech API Voice Recognition (Multilingual)
+  // Robust Multilingual Web Speech API Implementation
   const toggleVoiceRecording = () => {
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      alert("Speech recognition is not supported in this browser. Please use Chrome or type directly.");
+    setSpeechError(null);
+
+    // If currently listening, manually stop
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+      setIsListening(false);
       return;
     }
 
-    if (isListening) {
-      setIsListening(false);
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      setSpeechError("Speech recognition is not supported in this browser. Please use Google Chrome or Edge.");
       return;
     }
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "hi-IN"; // Seamlessly detects Hindi, English, and Hinglish
+    recognition.continuous = true; // KEEP RECORDING until user stops or finishes speaking
+    recognition.interimResults = true; // Show live interim words as they speak
+    recognition.maxAlternatives = 1;
+    recognition.lang = "hi-IN"; // Accurately captures Hindi, Hinglish and English in India locale
+
+    let finalTranscript = "";
 
     recognition.onstart = () => {
       setIsListening(true);
+      setSpeechError(null);
     };
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      setIsListening(false);
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcriptPart = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcriptPart + " ";
+        } else {
+          interimTranscript += transcriptPart;
+        }
+      }
+
+      const activeText = finalTranscript + interimTranscript;
+      if (activeText.trim()) {
+        setInputText(activeText);
+      }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: any) => {
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setSpeechError("Microphone permission denied. Please allow microphone access in your browser address bar.");
+      } else if (event.error === "no-speech") {
+        // Just brief silence, don't crash
+      } else {
+        setSpeechError(`Voice input error: ${event.error}`);
+      }
       setIsListening(false);
     };
 
@@ -130,12 +173,29 @@ export default function InteractiveChatReportPage() {
       setIsListening(false);
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (err: any) {
+      console.error("Recognition start failed:", err);
+      setIsListening(false);
+    }
   };
 
   // Send message to AI Assistant
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
+    // If recording is active, stop it before sending
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+    }
+
     const textToSend = inputText.trim();
     if (!textToSend && !selectedImage) return;
 
@@ -207,6 +267,14 @@ export default function InteractiveChatReportPage() {
   };
 
   const handleResetChat = () => {
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+    }
     setCurrentDiagnosis(null);
     setInputText("");
     setSelectedImage(null);
@@ -242,7 +310,7 @@ export default function InteractiveChatReportPage() {
         ward_or_zone: draftWard,
         duration_of_issue: draftDuration,
         detected_language: currentDiagnosis?.detected_language || "en",
-        original_input_mode: isListening ? "voice" : "chat",
+        original_input_mode: "voice",
       };
 
       const res = await api.post("/complaints/", payload);
@@ -266,7 +334,7 @@ export default function InteractiveChatReportPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#A94D37]/10 text-xs font-bold text-[#A94D37] uppercase">
               <Sparkles className="w-3.5 h-3.5" /> AI Multilingual Civic Assistant
             </div>
-            <h1 className="text-2xl font-bold text-[#17191D] mt-1">Interactive Complaint Chat</h1>
+            <h1 className="text-2xl font-bold text-[#17191D] mt-1">Interactive Voice & Chat Assistant</h1>
             <p className="text-xs text-gray-500">
               Speak or chat naturally in Hindi, Marathi, Hinglish, or English with photo evidence.
             </p>
@@ -279,6 +347,13 @@ export default function InteractiveChatReportPage() {
             <RotateCcw className="w-3.5 h-3.5" /> New Conversation
           </button>
         </div>
+
+        {speechError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+            <span>{speechError}</span>
+          </div>
+        )}
 
         {successTicket ? (
           <div className="bg-white p-8 rounded-2xl border border-green-200 shadow-xl text-center max-w-xl mx-auto">
@@ -403,6 +478,23 @@ export default function InteractiveChatReportPage() {
                 </div>
               )}
 
+              {/* Live Speech Recognition Banner when active */}
+              {isListening && (
+                <div className="px-4 py-2 bg-red-50 border-t border-red-200 flex items-center justify-between text-xs text-red-700">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping"></span>
+                    <span className="font-semibold">Microphone Live — Speak in Hindi, Marathi or English...</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleVoiceRecording}
+                    className="px-2 py-0.5 bg-red-600 text-white rounded text-[11px] font-bold"
+                  >
+                    Done Speaking
+                  </button>
+                </div>
+              )}
+
               {/* Chat Input Controls */}
               <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-gray-200 flex items-center gap-2">
                 <input
@@ -425,12 +517,12 @@ export default function InteractiveChatReportPage() {
                 <button
                   type="button"
                   onClick={toggleVoiceRecording}
-                  className={`p-2 rounded-lg transition ${
+                  className={`p-2.5 rounded-xl transition ${
                     isListening
-                      ? "bg-red-500 text-white animate-pulse"
-                      : "text-gray-500 hover:text-[#A94D37] hover:bg-gray-100"
+                      ? "bg-red-500 text-white shadow-lg animate-pulse"
+                      : "text-gray-600 hover:text-[#A94D37] hover:bg-gray-100"
                   }`}
-                  title="Record Speech (Hindi / Eng / Marathi)"
+                  title={isListening ? "Stop Recording" : "Record Speech (Hindi / Marathi / English)"}
                 >
                   {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                 </button>
@@ -441,8 +533,8 @@ export default function InteractiveChatReportPage() {
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder={
                     isListening
-                      ? "Listening... speak now in Hindi/Marathi/English"
-                      : "Type problem e.g., 'Gali no 3 me sewer overflow ho raha hai'..."
+                      ? "Listening to voice input... speak clearly..."
+                      : "Type problem or speak via mic (e.g. 'Hamare gali me kachra pada hai')..."
                   }
                   className="flex-1 px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#A94D37] focus:bg-white"
                 />
