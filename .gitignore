@@ -1,20 +1,27 @@
-# Python / Django
+# Python / Django / Virtualenv
 __pycache__/
 *.py[cod]
 *$py.class
 *.sqlite3
 venv/
+.venv/
 .env
+.env.local
+.env.*
+!.env.example
+!.env.production.example
 
 # Node / Next.js
 node_modules/
 .next/
 out/
+dist/
 build/
 .DS_Store
 *.log
+.vscode/
 
+# Media and Uploads
 backend/media/complaint_evidence/
 media/
 *.pdf
-
