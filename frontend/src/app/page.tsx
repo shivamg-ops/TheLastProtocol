@@ -60,7 +60,7 @@ export default function Home() {
       </section>
 
       {/* 6 Categories Section */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <section id="categories" className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-extrabold text-[#17191D]">Configured Complaint Verticals</h2>
           <p className="text-gray-600 text-sm mt-2">Instantly recognized by JanSahayak Multilingual AI model</p>
@@ -85,7 +85,7 @@ export default function Home() {
       </section>
 
       {/* Workflow Section */}
-      <section className="bg-white py-16 px-4 sm:px-6 lg:px-8 border-y border-gray-200">
+      <section id="workflow" className="bg-white py-16 px-4 sm:px-6 lg:px-8 border-y border-gray-200">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-extrabold text-[#17191D]">Autonomous Civic Workflow</h2>
