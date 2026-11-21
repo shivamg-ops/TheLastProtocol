@@ -460,6 +460,17 @@ Guidelines:
                 if parsed:
                     validated = validate_gemini_image_payload(parsed)
                     if validated:
+                        # Optional YOLO Civic Object Detection Enrichment
+                        try:
+                            from .yolo_detector import YOLODetector
+                            yolo_res = YOLODetector().detect(image_path=image_file_path)
+                            validated["yolo_analysis"] = yolo_res
+                            if yolo_res.get("detection_status") == "success" and yolo_res.get("detected_objects"):
+                                top_obj = yolo_res.get("class_name")
+                                validated["detected_objects"] = list(set(validated["detected_objects"] + [top_obj]))
+                        except Exception as yolo_err:
+                            logger.debug(f"Optional YOLO detection bypassed: {yolo_err}")
+
                         # Construct clean human-readable analysis summary
                         summary = validated.get("summary_note") or f"Visual analysis detected {validated['detected_issue']}."
                         status_str = validated["verification_status"].capitalize()

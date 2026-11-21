@@ -595,6 +595,88 @@ class JanSahayakAPITests(TestCase):
         self.assertIsNone(resp_valid_comp.data['longitude'])
         self.assertEqual(resp_valid_comp.data['landmark'], 'City Hospital')
 
+    def test_yolo_object_detector(self):
+        import os
+        import tempfile
+        from PIL import Image
+        from unittest.mock import MagicMock
+        from .yolo_detector import YOLODetector
+
+        detector = YOLODetector()
+
+        # 1. Missing Image Test
+        res_no_img = detector.detect("/non/existent/image_path.jpg")
+        self.assertEqual(res_no_img["detection_status"], "invalid_image")
+        self.assertEqual(res_no_img["confidence"], 0.0)
+
+        # 2. Corrupt Image Test
+        corrupt_f = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        corrupt_f.write(b"CORRUPTED_BYTES")
+        corrupt_f.close()
+        try:
+            res_corrupt = detector.detect(corrupt_f.name)
+            self.assertEqual(res_corrupt["detection_status"], "invalid_image")
+        finally:
+            if os.path.exists(corrupt_f.name):
+                os.remove(corrupt_f.name)
+
+        # 3. Missing Model Weights File
+        valid_img_f = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        img = Image.new("RGB", (64, 64), color="gray")
+        img.save(valid_img_f, format="JPEG")
+        valid_img_f.close()
+
+        try:
+            # Model path pointing to non-existent weights
+            res_no_model = detector.detect(valid_img_f.name, model_path="/non/existent/weights.pt")
+            self.assertEqual(res_no_model["detection_status"], "model_not_found")
+            self.assertIn("No trained YOLO weights", res_no_model["summary"])
+
+            # 4. Mock Successful Detection with Fine-Tuned Model
+            mock_model = MagicMock()
+            mock_model.names = {0: "pothole", 1: "garbage_pile"}
+
+            mock_box = MagicMock()
+            mock_box.cls = [MagicMock(item=lambda: 0)]
+            mock_box.conf = [MagicMock(item=lambda: 0.88)]
+            mock_box.xyxy = [[10.0, 15.0, 50.0, 60.0]]
+
+            mock_result = MagicMock()
+            mock_result.boxes = [mock_box]
+            mock_model.predict.return_value = [mock_result]
+
+            # Inject mock model into detector
+            detector._model = mock_model
+            detector._loaded_path = valid_img_f.name  # dummy existing path
+
+            res_mock_success = detector.detect(valid_img_f.name, model_path=valid_img_f.name)
+            self.assertEqual(res_mock_success["detection_status"], "success")
+            self.assertEqual(res_mock_success["class_name"], "pothole")
+            self.assertEqual(res_mock_success["confidence"], 0.88)
+            self.assertEqual(len(res_mock_success["bounding_boxes"]), 1)
+            self.assertEqual(res_mock_success["bounding_boxes"][0], [10.0, 15.0, 50.0, 60.0])
+
+            # 5. Mock No Detections
+            mock_empty_result = MagicMock()
+            mock_empty_result.boxes = []
+            mock_model.predict.return_value = [mock_empty_result]
+
+            res_empty = detector.detect(valid_img_f.name, model_path=valid_img_f.name)
+            self.assertEqual(res_empty["detection_status"], "no_detections")
+            self.assertEqual(len(res_empty["detected_objects"]), 0)
+
+            # 6. Verify Supported Classes Logic (Never fabricates unsupported classes)
+            supported = detector.get_supported_classes(mock_model)
+            self.assertIn("pothole", supported)
+            self.assertNotIn("alien_spacecraft", supported)
+
+        finally:
+            detector._model = None
+            detector._loaded_path = None
+            if os.path.exists(valid_img_f.name):
+                os.remove(valid_img_f.name)
+
+
 
 
 
