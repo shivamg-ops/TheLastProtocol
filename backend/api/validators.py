@@ -20,3 +20,4 @@ def validate_evidence_file(file):
     all_allowed = [item for sublist in ALLOWED_EXTENSIONS.values() for item in sublist]
     if ext not in all_allowed:
         raise ValidationError(f"Unsupported file extension '{ext}'. Allowed extensions: {', '.join(all_allowed)}")
+
