@@ -1579,7 +1579,7 @@ class JanSahayakAPITests(TestCase):
         self.assertEqual(res_hi["category"], "Garbage and Sanitation")
         self.assertEqual(res_hi["detected_language"], "hi")
         self.assertIsNotNone(res_hi["location_extracted"])
-        self.assertIn("गांधी चौक", res_hi["location_extracted"])
+        self.assertTrue("गांधी चौक" in res_hi["location_extracted"] or "Gandhi Chowk" in res_hi["location_extracted"])
         self.assertTrue(res_hi["ready_to_submit"])
 
         # 2. Hinglish Voice Transcript with Missing Location

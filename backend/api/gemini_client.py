@@ -287,6 +287,13 @@ def validate_gemini_complaint_payload(payload: Any) -> Optional[Dict[str, Any]]:
         if not location and "Exact location or landmark" not in missing:
             missing.append("Exact location or landmark")
 
+    clarif_q = str(payload.get("clarification_question", "")).strip() or None if payload.get("clarification_question") else None
+    if not ready and not clarif_q:
+        if not location:
+            clarif_q = "Please provide the exact street name, area, or nearest landmark."
+        else:
+            clarif_q = "Could you please provide more details about this issue?"
+
     # 7. Safe structured construction
     validated: Dict[str, Any] = {
         "intent": intent,
@@ -300,7 +307,7 @@ def validate_gemini_complaint_payload(payload: Any) -> Optional[Dict[str, Any]]:
         "ward_extracted": str(payload.get("ward_extracted", "")).strip() or None if payload.get("ward_extracted") else None,
         "duration_extracted": str(payload.get("duration_extracted", "Ongoing")).strip() or "Ongoing",
         "missing_information": missing,
-        "clarification_question": str(payload.get("clarification_question", "")).strip() or None if payload.get("clarification_question") else None,
+        "clarification_question": clarif_q,
         "assistant_reply": str(payload.get("assistant_reply", "Your complaint has been noted.")).strip(),
         "ready_to_submit": ready
     }

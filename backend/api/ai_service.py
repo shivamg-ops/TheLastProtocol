@@ -178,7 +178,13 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
         full_text = f"Conversation History:\n{history_str}\n\nLatest Citizen Message:\n{user_input}"
 
     # 1. Primary: Safe Central Gemini Query with Strict Validation
-    prompt = f"{full_text}\n\nSTRICT JSON Output:"
+    prompt = (
+        f"{full_text}\n\n"
+        "IMPORTANT RULES:\n"
+        "- If user input is in Hindi or Marathi, KEEP extracted location/landmark names in their ORIGINAL script or language (do not translate Devanagari landmark names like 'गांधी चौक' into English).\n"
+        "- If location is missing or not ready to submit, YOU MUST PROVIDE a clear 'clarification_question' in the detected language asking for the missing location/landmark.\n\n"
+        "STRICT JSON Output:"
+    )
     gemini_raw_response = call_gemini_safe(prompt=prompt, system_instruction=SYSTEM_PROMPT)
     if gemini_raw_response:
         parsed_json = clean_and_parse_json(gemini_raw_response)
