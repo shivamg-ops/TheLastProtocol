@@ -36,6 +36,7 @@ export default function InteractiveChatReportPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [hasUsedVoice, setHasUsedVoice] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -159,6 +160,7 @@ export default function InteractiveChatReportPage() {
       const activeText = finalTranscript + interimTranscript;
       if (activeText.trim()) {
         setInputText(activeText);
+        setHasUsedVoice(true);
       }
     };
 
@@ -304,6 +306,21 @@ export default function InteractiveChatReportPage() {
       return;
     }
 
+    // Task 7: Enforce ready_to_submit check before complaint creation
+    if (currentDiagnosis && currentDiagnosis.ready_to_submit === false) {
+      const clarifyText = currentDiagnosis.clarification_question ||
+        (currentDiagnosis.missing_information && currentDiagnosis.missing_information.length > 0
+          ? `Please provide: ${currentDiagnosis.missing_information.join(", ")}`
+          : "Complaint cannot be submitted yet as essential location or grievance details are missing.");
+      alert(`Cannot submit complaint yet:\n${clarifyText}`);
+      return;
+    }
+
+    if (!draftAddress || draftAddress.trim().length < 3 || draftAddress.toLowerCase() === "reported location") {
+      alert("Please specify the exact street, landmark, or location before submitting.");
+      return;
+    }
+
     setSubmitting(true);
     setEvidenceStatus("idle");
     try {
@@ -312,11 +329,11 @@ export default function InteractiveChatReportPage() {
         description: draftDescription,
         category: draftCategory,
         priority: draftPriority,
-        address: draftAddress || "Reported Location",
+        address: draftAddress.trim(),
         ward_or_zone: draftWard,
         duration_of_issue: draftDuration,
         detected_language: currentDiagnosis?.detected_language || "en",
-        original_input_mode: "voice",
+        original_input_mode: hasUsedVoice ? "voice" : "text",
       };
 
       const res = await api.post("/complaints/", payload);
@@ -326,10 +343,20 @@ export default function InteractiveChatReportPage() {
       if (attachedEvidenceFile && createdComplaint?.id) {
         setEvidenceStatus("uploading");
         try {
+          const fileExt = attachedEvidenceFile.name.split(".").pop()?.toLowerCase() || "";
+          let fileType = "document";
+          if (["jpg", "jpeg", "png", "webp"].includes(fileExt)) {
+            fileType = "image";
+          } else if (["mp4", "mov", "avi"].includes(fileExt)) {
+            fileType = "video";
+          } else if (["mp3", "wav", "ogg", "m4a"].includes(fileExt)) {
+            fileType = "audio";
+          }
+
           const formData = new FormData();
           formData.append("complaint", createdComplaint.id);
           formData.append("file", attachedEvidenceFile);
-          formData.append("file_type", "image");
+          formData.append("file_type", fileType);
 
           await api.post("/evidence/", formData, {
             headers: {
@@ -611,20 +638,28 @@ export default function InteractiveChatReportPage() {
                     </span>
                   </div>
 
-                  {/* Missing Info Alert */}
-                  {currentDiagnosis.missing_information && currentDiagnosis.missing_information.length > 0 && (
-                    <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <strong>Information Needed:</strong>
-                        <ul className="list-disc ml-4 mt-0.5">
-                          {currentDiagnosis.missing_information.map((item: string, idx: number) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
+                    {/* Clarification / Missing Info Alert */}
+                    {currentDiagnosis.ready_to_submit === false && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="block font-semibold">Missing Essential Details Before Submission:</strong>
+                          {currentDiagnosis.clarification_question && (
+                            <p className="mt-1 text-amber-800 italic">"{currentDiagnosis.clarification_question}"</p>
+                          )}
+                          {currentDiagnosis.missing_information && currentDiagnosis.missing_information.length > 0 && (
+                            <ul className="list-disc ml-4 mt-1 space-y-0.5 text-[11px] text-amber-700">
+                              {currentDiagnosis.missing_information.map((item: string, idx: number) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="mt-2 text-[10px] text-amber-600">
+                            Please type or speak the missing details on the left, or edit the address field directly below.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Editable Review Form */}
                   <form onSubmit={handleSubmitComplaint} className="mt-4 space-y-3 text-xs">

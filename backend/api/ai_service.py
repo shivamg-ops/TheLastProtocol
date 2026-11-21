@@ -3,7 +3,13 @@ import re
 import os
 from datetime import timedelta
 from django.utils import timezone
-from .gemini_client import call_gemini_safe, clean_and_parse_json, GeminiClientManager
+from .gemini_client import (
+    call_gemini_safe,
+    clean_and_parse_json,
+    validate_gemini_complaint_payload,
+    validate_gemini_image_payload,
+    GeminiClientManager
+)
 
 SYSTEM_PROMPT = """
 You are JanSahayak - an intelligent multilingual civic complaint management assistant.
@@ -164,13 +170,15 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
         history_str = "\n".join([f"{msg.get('sender', 'user')}: {msg.get('text', '')}" for msg in conversation_history])
         full_text = f"Conversation History:\n{history_str}\n\nLatest Citizen Message:\n{user_input}"
 
-    # 1. Primary: Safe Central Gemini Query
+    # 1. Primary: Safe Central Gemini Query with Strict Validation
     prompt = f"{full_text}\n\nSTRICT JSON Output:"
     gemini_raw_response = call_gemini_safe(prompt=prompt, system_instruction=SYSTEM_PROMPT)
     if gemini_raw_response:
         parsed_json = clean_and_parse_json(gemini_raw_response)
-        if parsed_json and isinstance(parsed_json, dict) and "category" in parsed_json:
-            return parsed_json
+        if parsed_json:
+            validated = validate_gemini_complaint_payload(parsed_json)
+            if validated:
+                return validated
 
     # 2. Resilient Fallback: Multilingual Heuristic Rule Engine
     text_lower = full_text.lower()
@@ -189,7 +197,11 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
         detected_lang = "hinglish"
 
     # Intent Detection: Check if non-civic inquiry or greeting
-    inquiry_keywords = ['who is', 'biography', 'what is', 'tell me about', 'weather', 'movie', 'song', 'joke', 'capital of', 'kaun hai', 'kya hai']
+    inquiry_keywords = [
+        'who is', 'biography', 'what is', 'what are', 'tell me about', 'weather',
+        'movie', 'song', 'joke', 'capital of', 'kaun hai', 'kya hai', 'kab khulta hai',
+        'timings', 'working hours', 'office hours', 'how to use', 'help me'
+    ]
     greeting_keywords = ['hello', 'hi', 'namaste', 'kem cho', 'good morning', 'good evening', 'hey']
 
     if any(ik in text_lower for ik in inquiry_keywords):
@@ -338,30 +350,298 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
         "ready_to_submit": ready
     }
 
-def analyze_image_evidence(image_file_path: str, api_key: str = None) -> dict:
+def analyze_image_evidence(image_file_path: str, complaint_text: str = "", complaint_category: str = "", api_key: str = None) -> dict:
+    """
+    Truthful multimodal visual analysis of civic complaint evidence.
+    1. Validates physical file presence, size (<25MB), and readability (via PIL).
+    2. Sends the image + citizen complaint context to Gemini with a strict schema.
+    3. Validates response with validate_gemini_image_payload().
+    4. Enforces truthfulness invariants:
+       - Never claims 100% certainty or authenticity based on file metadata.
+       - If Gemini fails, times out, or image is unreadable, returns verification_status='failed' or 'pending',
+         NEVER 'verified'.
+       - If the image does not match the complaint description, flags as 'mismatch'.
+    """
+    import logging
+    logger = logging.getLogger("jansahayak_ai")
+
     if api_key:
         os.environ['GEMINI_API_KEY'] = api_key
 
+    # 1. File existence check
+    if not image_file_path or not os.path.exists(image_file_path):
+        return {
+            "status": "error",
+            "detected_issue": "File not found",
+            "detected_objects": [],
+            "image_readability": "unreadable",
+            "complaint_image_match": False,
+            "confidence_score": 0.0,
+            "verification_status": "failed",
+            "review_required": True,
+            "summary_note": "Image file could not be located on the server filesystem.",
+            "analysis": "Verification failed: Evidence file could not be found."
+        }
+
+    # 2. File size and extension check
+    file_size = os.path.getsize(image_file_path)
+    if file_size > 25 * 1024 * 1024:
+        return {
+            "status": "error",
+            "detected_issue": "File exceeds size limit",
+            "detected_objects": [],
+            "image_readability": "unreadable",
+            "complaint_image_match": False,
+            "confidence_score": 0.0,
+            "verification_status": "failed",
+            "review_required": True,
+            "summary_note": "Image file exceeds maximum allowable 25 MB limit.",
+            "analysis": "Verification failed: File size exceeds 25 MB."
+        }
+
+    # 3. Image integrity / readability check via PIL
+    try:
+        from PIL import Image
+        with Image.open(image_file_path) as img:
+            img.verify()
+        # Re-open for actual processing (verify closes file handles in some PIL versions)
+        pil_img = Image.open(image_file_path)
+    except Exception as img_err:
+        logger.warning(f"Corrupt or unreadable image uploaded ({image_file_path}): {img_err}")
+        return {
+            "status": "error",
+            "detected_issue": "Corrupt or unreadable image format",
+            "detected_objects": [],
+            "image_readability": "unreadable",
+            "complaint_image_match": False,
+            "confidence_score": 0.0,
+            "verification_status": "failed",
+            "review_required": True,
+            "summary_note": "Uploaded file is corrupted, not a valid image, or unreadable.",
+            "analysis": "Verification failed: Corrupt or unreadable image file. Manual inspection required."
+        }
+
+    # 4. Multimodal Analysis via Central Gemini Manager
     manager = GeminiClientManager()
     client = manager.get_client()
 
+    image_prompt = f"""You are the JanSahayak Civic Evidence Verification specialist.
+Analyze this civic grievance image carefully and compare it against the citizen's complaint details:
+- Complaint Category: {complaint_category or 'Not specified'}
+- Complaint Description: {complaint_text or 'Not specified'}
+
+Analyze the image and return a STRICT JSON object without markdown formatting:
+{{
+  "detected_issue": "Brief civic issue name (e.g. Road pothole, Garbage overflow, Leaking pipe, Broken streetlight, Sewage water, Road obstruction, or None/Unclear)",
+  "detected_objects": ["list", "of", "visible", "objects", "debris", "road", "water", "pole"],
+  "image_readability": "clear | blurry | dark | unreadable | partial",
+  "complaint_image_match": true or false,
+  "confidence_score": 0.88,
+  "verification_status": "verified | mismatch | unverified | failed",
+  "review_required": true or false,
+  "summary_note": "1 concise factual sentence describing what is visually visible and whether it matches the complaint."
+}}
+
+Guidelines:
+1. If the photo shows a completely different subject from the complaint (e.g. food/pet for a pothole complaint), set complaint_image_match=false, verification_status='mismatch', and review_required=true.
+2. If image is too dark, blurry, or unreadable to identify civic infrastructure, set image_readability='blurry' or 'dark', verification_status='unverified', and review_required=true.
+3. Never claim 100% certainty (maximum confidence 0.95).
+4. Do not assume file metadata proves authenticity.
+"""
+
     if client:
         try:
-            from PIL import Image
-            img = Image.open(image_file_path)
-            prompt = "Analyze this civic problem image. Identify category (Garbage, Road pothole, Water leak, Streetlight, Sewage, Traffic obstruction), severity, and a brief 1-sentence visual description."
             response = client.models.generate_content(
                 model=manager.get_model_name(),
-                contents=[img, prompt]
+                contents=[pil_img, image_prompt]
             )
             if response and hasattr(response, 'text') and response.text:
-                return {"status": "success", "analysis": response.text.strip()}
+                parsed = clean_and_parse_json(response.text)
+                if parsed:
+                    validated = validate_gemini_image_payload(parsed)
+                    if validated:
+                        # Construct clean human-readable analysis summary
+                        summary = validated.get("summary_note") or f"Visual analysis detected {validated['detected_issue']}."
+                        status_str = validated["verification_status"].capitalize()
+                        validated["status"] = "success"
+                        validated["analysis"] = f"[{status_str}] {summary} (Confidence: {int(validated['confidence_score']*100)}%, Match: {validated['complaint_image_match']})"
+                        return validated
         except Exception as e:
-            print("Vision API call error, falling back to local description:", e)
+            logger.warning(f"Gemini image vision API call failed: {e}")
+
+    # 5. Truthful Fallback When Gemini is Unavailable, Times Out, or Fails
+    # CRITICAL: Never falsely mark image as verified when AI fails
+    return {
+        "status": "pending",
+        "detected_issue": "Pending manual review",
+        "detected_objects": [],
+        "image_readability": "partial",
+        "complaint_image_match": False,
+        "confidence_score": 0.0,
+        "verification_status": "pending",
+        "review_required": True,
+        "summary_note": "Automated visual verification is currently unavailable; evidence queued for staff verification.",
+        "analysis": "[Pending Staff Verification] Automated image analysis could not be completed. Flagged for manual review."
+    }
+
+def compute_image_hashes(image_file_path: str) -> dict:
+    """
+    Computes both exact SHA-256 binary hash and perceptual pHash for an image.
+    Handles corrupted files and unsupported formats gracefully.
+    Returns:
+        {
+            "sha256": str or None,
+            "phash": str or None,
+            "is_valid": bool,
+            "error": str or None
+        }
+    """
+    import hashlib
+    if not image_file_path or not os.path.exists(image_file_path):
+        return {"sha256": None, "phash": None, "is_valid": False, "error": "File does not exist"}
+
+    # 1. Exact SHA-256 Hash
+    try:
+        sha256 = hashlib.sha256()
+        with open(image_file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                sha256.update(chunk)
+        sha256_hex = sha256.hexdigest()
+    except Exception as e:
+        return {"sha256": None, "phash": None, "is_valid": False, "error": f"Failed to read file: {e}"}
+
+    # 2. Perceptual Hash (pHash)
+    phash_str = None
+    try:
+        from PIL import Image
+        import imagehash
+        with Image.open(image_file_path) as img:
+            # Convert to RGB if needed to handle palette / RGBA
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            phash_obj = imagehash.phash(img)
+            phash_str = str(phash_obj)
+    except Exception as e:
+        # Corrupted or unreadable image
+        return {"sha256": sha256_hex, "phash": None, "is_valid": False, "error": f"Corrupted or invalid image: {e}"}
 
     return {
-        "status": "success",
-        "analysis": "Visual evidence verified: Civic issue debris / condition identified in photo."
+        "sha256": sha256_hex,
+        "phash": phash_str,
+        "is_valid": True,
+        "error": None
+    }
+
+
+def detect_duplicate_evidence(
+    image_file_path: str,
+    current_evidence_id: int = None,
+    current_complaint_id: int = None,
+    similarity_threshold: float = 0.85
+) -> dict:
+    """
+    Detects whether an uploaded image evidence is an exact or perceptual duplicate.
+    - Compares against existing ComplaintEvidence in the database.
+    - Evaluates exact SHA-256 match first.
+    - Evaluates perceptual pHash Hamming distance (distance <= 10 or similarity >= threshold).
+    - Preserves privacy: only returns ID and similarity score, never reveals other citizens' info.
+    - Never automatically rejects a complaint; sets review_required=True.
+    
+    Returns:
+        {
+            "is_duplicate": bool,
+            "duplicate_type": 'exact' | 'perceptual' | 'none',
+            "similarity_score": float,
+            "review_required": bool,
+            "matched_evidence_id": int or None,
+            "sha256_hash": str or None,
+            "phash": str or None,
+            "summary": str
+        }
+    """
+    from .models import ComplaintEvidence
+
+    hash_res = compute_image_hashes(image_file_path)
+    if not hash_res["is_valid"]:
+        return {
+            "is_duplicate": False,
+            "duplicate_type": "none",
+            "similarity_score": 0.0,
+            "review_required": True,  # Corrupted images should be flagged for review
+            "matched_evidence_id": None,
+            "sha256_hash": hash_res.get("sha256"),
+            "phash": None,
+            "summary": "Image hash computation failed; manual inspection needed."
+        }
+
+    sha256_hex = hash_res["sha256"]
+    phash_str = hash_res["phash"]
+
+    # Exclude current evidence and evidence from the exact same complaint (if already attached)
+    queryset = ComplaintEvidence.objects.filter(file_type='image')
+    if current_evidence_id:
+        queryset = queryset.exclude(id=current_evidence_id)
+
+    # 1. Exact Duplicate Check (SHA-256)
+    exact_match = queryset.filter(sha256_hash=sha256_hex).first()
+    if exact_match:
+        return {
+            "is_duplicate": True,
+            "duplicate_type": "exact",
+            "similarity_score": 1.0,
+            "review_required": True,
+            "matched_evidence_id": exact_match.id,
+            "sha256_hash": sha256_hex,
+            "phash": phash_str,
+            "summary": f"Exact binary duplicate of existing evidence (ID #{exact_match.id})."
+        }
+
+    # 2. Perceptual Duplicate Check (pHash Hamming distance)
+    # 64-bit hash: Hamming distance max 64.
+    # Similarity = 1.0 - (distance / 64.0)
+    best_match_evidence = None
+    best_similarity = 0.0
+
+    if phash_str:
+        import imagehash
+        try:
+            curr_hash = imagehash.hex_to_hash(phash_str)
+            existing_phashes = queryset.exclude(phash__isnull=True).exclude(phash='').values_list('id', 'phash')
+
+            for ev_id, other_phash_str in existing_phashes:
+                try:
+                    other_hash = imagehash.hex_to_hash(other_phash_str)
+                    distance = curr_hash - other_hash  # Hamming distance
+                    similarity = round(1.0 - (distance / 64.0), 3)
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best_match_evidence = ev_id
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if best_match_evidence and best_similarity >= similarity_threshold:
+        return {
+            "is_duplicate": True,
+            "duplicate_type": "perceptual",
+            "similarity_score": best_similarity,
+            "review_required": True,
+            "matched_evidence_id": best_match_evidence,
+            "sha256_hash": sha256_hex,
+            "phash": phash_str,
+            "summary": f"Perceptually similar to evidence #{best_match_evidence} ({int(best_similarity*100)}% visual match)."
+        }
+
+    return {
+        "is_duplicate": False,
+        "duplicate_type": "none",
+        "similarity_score": round(best_similarity, 3) if best_similarity > 0 else 0.0,
+        "review_required": False,
+        "matched_evidence_id": None,
+        "sha256_hash": sha256_hex,
+        "phash": phash_str,
+        "summary": "Unique civic grievance photo evidence."
     }
 
 def check_possible_duplicates(new_complaint, existing_complaints_queryset):

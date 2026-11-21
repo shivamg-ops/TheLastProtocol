@@ -124,6 +124,16 @@ class ComplaintEvidence(models.Model):
     ai_analysis_description = models.TextField(blank=True, null=True)
     is_resolution_proof = models.BooleanField(default=False)
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    
+    # Task 5: Duplicate Image Detection Hashes & Metadata
+    sha256_hash = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    phash = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    is_duplicate = models.BooleanField(default=False)
+    duplicate_type = models.CharField(max_length=20, blank=True, null=True)  # 'exact', 'perceptual', 'none'
+    similarity_score = models.FloatField(default=0.0)
+    matched_evidence = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='duplicate_instances')
+    review_required = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
 class ComplaintTimeline(models.Model):

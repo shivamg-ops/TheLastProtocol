@@ -13,7 +13,12 @@ from .serializers import (
     ComplaintCategorySerializer, ComplaintSerializer, ComplaintEvidenceSerializer,
     ComplaintTimelineSerializer, NotificationSerializer, CitizenFeedbackSerializer, SubscriptionSerializer
 )
-from .ai_service import analyze_complaint_text, analyze_image_evidence, check_possible_duplicates
+from .ai_service import (
+    analyze_complaint_text,
+    analyze_image_evidence,
+    detect_duplicate_evidence,
+    check_possible_duplicates
+)
 
 class RegisterView(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
@@ -286,10 +291,56 @@ class EvidenceUploadView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         evidence = serializer.save(uploaded_by=self.request.user)
-        # Auto-run AI image description if it is an image
+        # Auto-run AI image description and duplicate detection if it is an image
         if evidence.file_type == 'image' and evidence.file:
-            res = analyze_image_evidence(evidence.file.path)
-            evidence.ai_analysis_description = res.get('analysis', '')
+            # 1. Duplicate Image Analysis (exact SHA-256 and perceptual pHash)
+            dup_res = detect_duplicate_evidence(
+                image_file_path=evidence.file.path,
+                current_evidence_id=evidence.id,
+                current_complaint_id=evidence.complaint_id if evidence.complaint else None
+            )
+            evidence.sha256_hash = dup_res.get("sha256_hash")
+            evidence.phash = dup_res.get("phash")
+            evidence.is_duplicate = dup_res.get("is_duplicate", False)
+            evidence.duplicate_type = dup_res.get("duplicate_type", "none")
+            evidence.similarity_score = dup_res.get("similarity_score", 0.0)
+            evidence.review_required = dup_res.get("review_required", False)
+            
+            matched_id = dup_res.get("matched_evidence_id")
+            if matched_id:
+                try:
+                    evidence.matched_evidence = ComplaintEvidence.objects.get(id=matched_id)
+                    # Flag parent complaint for staff awareness without rejecting it
+                    if evidence.complaint:
+                        evidence.complaint.ai_duplicate_suspect = True
+                        evidence.complaint.save(update_fields=['ai_duplicate_suspect'])
+                except ComplaintEvidence.DoesNotExist:
+                    pass
+
+            # 2. Visual Quality & Multimodal Verification
+            complaint_text = evidence.complaint.description if evidence.complaint else ""
+            complaint_category = evidence.complaint.category.name if (evidence.complaint and evidence.complaint.category) else ""
+            res = analyze_image_evidence(
+                image_file_path=evidence.file.path,
+                complaint_text=complaint_text,
+                complaint_category=complaint_category
+            )
+            analysis_text = res.get('analysis', '')
+            if evidence.is_duplicate:
+                analysis_text += f" [Duplicate Notice: {dup_res['summary']}]"
+            evidence.ai_analysis_description = analysis_text
+
+            evidence.save(update_fields=[
+                'sha256_hash', 'phash', 'is_duplicate', 'duplicate_type',
+                'similarity_score', 'review_required', 'matched_evidence',
+                'ai_analysis_description'
+            ])
+        elif evidence.file_type == 'video' and evidence.file:
+            # Task 6: Videos are NOT sent to Gemini image analysis
+            evidence.ai_analysis_description = "[Video Evidence Attached] Queued for municipal staff playback and review."
+            evidence.save(update_fields=['ai_analysis_description'])
+        elif evidence.file:
+            evidence.ai_analysis_description = f"[{evidence.get_file_type_display()} Attached] Standard evidence record."
             evidence.save(update_fields=['ai_analysis_description'])
 
 class AnalyticsViewSet(viewsets.GenericViewSet):

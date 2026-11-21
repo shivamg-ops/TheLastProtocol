@@ -128,10 +128,10 @@ class ComplaintCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(ComplaintEvidence)
 class ComplaintEvidenceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'complaint_link', 'file_type', 'is_resolution_proof', 'uploaded_by', 'created_at')
-    list_filter = ('file_type', 'is_resolution_proof', 'created_at')
-    search_fields = ('complaint__tracking_id', 'uploaded_by__username', 'ai_analysis_description')
-    readonly_fields = ('created_at',)
+    list_display = ('id', 'complaint_link', 'file_type', 'is_duplicate', 'duplicate_type', 'similarity_score', 'review_required', 'uploaded_by', 'created_at')
+    list_filter = ('file_type', 'is_duplicate', 'duplicate_type', 'review_required', 'is_resolution_proof', 'created_at')
+    search_fields = ('complaint__tracking_id', 'uploaded_by__username', 'ai_analysis_description', 'sha256_hash')
+    readonly_fields = ('sha256_hash', 'phash', 'is_duplicate', 'duplicate_type', 'similarity_score', 'matched_evidence', 'created_at')
 
     def complaint_link(self, obj):
         return f"{obj.complaint.tracking_id} - {obj.complaint.title[:30]}"
