@@ -1,0 +1,25 @@
+flowchart TD
+    A["Citizen opens JanSahayak"] --> B["Login / Register"]
+    B --> C["AI Interface"]
+    C --> D{"Input Type"}
+    D --> E["Text"]
+    D --> F["Voice"]
+    D --> G["Photo"]
+    D --> H["Video"]
+    E --> I["AI Complaint Understanding"]
+    F --> J["Speech to Text"]
+    J --> I
+    G --> I
+    H --> I
+    I --> K["Extract Category and Location"]
+    K --> L["Ask Missing Questions"]
+    L --> M["Show Complaint Preview"]
+    M --> N{"User Confirms?"}
+    N -->|No| L
+    N -->|Yes| O["Create Complaint Ticket"]
+    O --> P["Save in PostgreSQL"]
+    O --> Q["Notify Admin"]
+    P --> R["Citizen Tracks Complaint"]
+    Q --> S["Admin Reviews and Assigns"]
+    S --> T["Update Status"]
+    T --> R
