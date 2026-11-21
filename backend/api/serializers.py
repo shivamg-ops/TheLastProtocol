@@ -18,13 +18,18 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 'role', 'phone_number', 'preferred_language', 'organization_name']
 
     def create(self, validated_data):
+        # Restrict public registration to citizen or non-privileged community tiers only
+        role = validated_data.get('role', 'citizen')
+        if role in ['admin', 'staff']:
+            role = 'citizen'
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data.get('email', ''),
             password=validated_data['password'],
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
-            role=validated_data.get('role', 'citizen'),
+            role=role,
             phone_number=validated_data.get('phone_number', ''),
             preferred_language=validated_data.get('preferred_language', 'en'),
             organization_name=validated_data.get('organization_name', '')

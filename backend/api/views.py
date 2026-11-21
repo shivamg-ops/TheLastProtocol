@@ -112,6 +112,14 @@ class ComplaintViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def update_status(self, request, pk=None):
         complaint = self.get_object()
+        
+        # BOLA Protection: Only admins or assigned staff can update complaint status
+        if request.user.role != UserRole.ADMIN and complaint.assigned_staff != request.user:
+            return Response(
+                {"error": "Forbidden: Only municipal administrators or the assigned field staff member can update ticket status."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         new_status = request.data.get('status')
         notes = request.data.get('notes', '')
 

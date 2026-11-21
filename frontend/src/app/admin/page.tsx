@@ -4,13 +4,11 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { api } from "@/lib/api";
-import { Shield, Users, Building, AlertTriangle, CheckCircle, Clock, Filter, ArrowUpRight } from "lucide-react";
 
 export default function AdminPage() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [complaints, setComplaints] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [assigningComplaint, setAssigningComplaint] = useState<any>(null);
   const [staffId, setStaffId] = useState("");
 
@@ -19,7 +17,6 @@ export default function AdminPage() {
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const [resAnalytics, resComplaints, resDepts] = await Promise.all([
         api.get("/analytics/summary/"),
@@ -31,8 +28,6 @@ export default function AdminPage() {
       setDepartments(resDepts.data);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -240,4 +235,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

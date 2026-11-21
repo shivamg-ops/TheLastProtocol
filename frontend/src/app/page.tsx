@@ -13,7 +13,7 @@ export default function Home() {
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#A94D37_1px,transparent_1px)] [background-size:16px_16px]"></div>
         <div className="max-w-5xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold uppercase tracking-wider text-gray-300 mb-6">
-            <Sparkles className="w-4 h-4 text-[#A94D37]" /> Multilingual Civic AI Platform
+            <Sparkles className="w-4 h-4 text-[#A94D37]" /> Multilingual AI Platform
           </div>
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight mb-6">
             From Voice to <span className="text-[#A94D37]">Resolution.</span>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { api } from "@/lib/api";
-import { Wrench, CheckCircle, Clock, AlertTriangle, Send } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 
 export default function StaffPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -39,8 +39,8 @@ export default function StaffPage() {
       setActiveTask(null);
       setNotesVal("");
       loadStaffTasks();
-    } catch (err) {
-      alert("Failed to update task status.");
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to update task status.");
     } finally {
       setSubmitting(false);
     }
@@ -157,4 +157,3 @@ export default function StaffPage() {
     </div>
   );
 }
-

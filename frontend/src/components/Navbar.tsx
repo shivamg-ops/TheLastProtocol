@@ -1,31 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Shield, MessageSquare, BarChart3, Users, LogOut, FileText, CheckCircle2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    try {
       const stored = localStorage.getItem("user");
       if (stored) {
-        try {
-          setUser(JSON.parse(stored));
-        } catch {
-          // ignore
-        }
+        setUser(JSON.parse(stored));
       }
+    } catch {
+      // ignore JSON parse error
     }
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.location.href = "/login";
+    setUser(null);
+    router.push("/login");
   };
 
   return (
@@ -38,18 +38,57 @@ export default function Navbar() {
                 JS
               </div>
               <div>
-                <span className="font-extrabold text-xl tracking-tight text-white">JANSAHAYAK <span className="text-[#A94D37]">AI</span></span>
-                <p className="text-[10px] text-gray-400 -mt-1 font-medium tracking-wide">FROM VOICE TO RESOLUTION</p>
+                <span className="font-extrabold text-xl tracking-tight text-white">
+                  JANSAHAYAK <span className="text-[#A94D37]">AI</span>
+                </span>
+                <p className="text-[10px] text-gray-400 -mt-1 font-medium tracking-wide">
+                  FROM VOICE TO RESOLUTION
+                </p>
               </div>
             </Link>
           </div>
 
           <div className="hidden md:flex items-center space-x-6 text-sm font-medium">
-            <Link href="/" className={`hover:text-[#A94D37] transition ${pathname === '/' ? 'text-[#A94D37]' : 'text-gray-300'}`}>Home</Link>
-            <Link href="/report" className={`hover:text-[#A94D37] transition ${pathname === '/report' ? 'text-[#A94D37]' : 'text-gray-300'}`}>Report Issue</Link>
-            <Link href="/citizen" className={`hover:text-[#A94D37] transition ${pathname.startsWith('/citizen') ? 'text-[#A94D37]' : 'text-gray-300'}`}>Citizen Portal</Link>
-            <Link href="/staff" className={`hover:text-[#A94D37] transition ${pathname.startsWith('/staff') ? 'text-[#A94D37]' : 'text-gray-300'}`}>Staff Workspace</Link>
-            <Link href="/admin" className={`hover:text-[#A94D37] transition ${pathname.startsWith('/admin') ? 'text-[#A94D37]' : 'text-gray-300'}`}>Admin Centre</Link>
+            <Link
+              href="/"
+              className={`hover:text-[#A94D37] transition ${
+                pathname === "/" ? "text-[#A94D37]" : "text-gray-300"
+              }`}
+            >
+              Home
+            </Link>
+            <Link
+              href="/report"
+              className={`hover:text-[#A94D37] transition ${
+                pathname === "/report" ? "text-[#A94D37]" : "text-gray-300"
+              }`}
+            >
+              Report Issue
+            </Link>
+            <Link
+              href="/citizen"
+              className={`hover:text-[#A94D37] transition ${
+                pathname.startsWith("/citizen") ? "text-[#A94D37]" : "text-gray-300"
+              }`}
+            >
+              Citizen Portal
+            </Link>
+            <Link
+              href="/staff"
+              className={`hover:text-[#A94D37] transition ${
+                pathname.startsWith("/staff") ? "text-[#A94D37]" : "text-gray-300"
+              }`}
+            >
+              Staff Workspace
+            </Link>
+            <Link
+              href="/admin"
+              className={`hover:text-[#A94D37] transition ${
+                pathname.startsWith("/admin") ? "text-[#A94D37]" : "text-gray-300"
+              }`}
+            >
+              Admin Centre
+            </Link>
           </div>
 
           <div className="flex items-center gap-3">
@@ -87,4 +126,3 @@ export default function Navbar() {
     </nav>
   );
 }
-

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { api } from "@/lib/api";
-import { Clock, CheckCircle2, AlertCircle, Eye, Plus, FileText, ArrowRight, Star } from "lucide-react";
+import { Eye, Plus, FileText } from "lucide-react";
 
 export default function CitizenDashboard() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -229,4 +229,3 @@ export default function CitizenDashboard() {
     </div>
   );
 }
-
