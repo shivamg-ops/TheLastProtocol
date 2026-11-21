@@ -1,0 +1,233 @@
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Count, Q
+from .models import (
+    User, Department, ComplaintCategory, Complaint,
+    ComplaintEvidence, ComplaintTimeline, Notification, CitizenFeedback, Subscription,
+    UserRole, ComplaintStatus
+)
+from .serializers import (
+    UserSerializer, RegisterSerializer, DepartmentSerializer,
+    ComplaintCategorySerializer, ComplaintSerializer, ComplaintEvidenceSerializer,
+    ComplaintTimelineSerializer, NotificationSerializer, CitizenFeedbackSerializer, SubscriptionSerializer
+)
+from .ai_service import analyze_complaint_text, analyze_image_evidence, check_possible_duplicates
+
+class RegisterView(viewsets.GenericViewSet):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = RegisterSerializer
+
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response({
+            "message": "User registered successfully",
+            "user": UserSerializer(user).data
+        }, status=status.HTTP_201_CREATED)
+
+class UserProfileView(viewsets.GenericViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        serializer = UserSerializer(request.user)
+        sub = getattr(request.user, 'subscription', None)
+        sub_data = SubscriptionSerializer(sub).data if sub else None
+        return Response({
+            "user": serializer.data,
+            "subscription": sub_data
+        })
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+class ComplaintCategoryViewSet(viewsets.ModelViewSet):
+    queryset = ComplaintCategory.objects.all()
+    serializer_class = ComplaintCategorySerializer
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+class ComplaintViewSet(viewsets.ModelViewSet):
+    serializer_class = ComplaintSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.role == UserRole.ADMIN:
+            return Complaint.objects.all().order_by('-created_at')
+        elif user.role == UserRole.STAFF:
+            return Complaint.objects.filter(assigned_staff=user).order_by('-created_at')
+        else:
+            return Complaint.objects.filter(citizen=user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        category_id = self.request.data.get('category')
+        dept = None
+        if category_id:
+            try:
+                cat = ComplaintCategory.objects.get(id=category_id)
+                dept = cat.department
+            except ComplaintCategory.DoesNotExist:
+                pass
+
+        complaint = serializer.save(citizen=user, department=dept)
+
+        # Log timeline
+        ComplaintTimeline.objects.create(
+            complaint=complaint,
+            performed_by=user,
+            action="Complaint Filed",
+            details="Complaint submitted by citizen.",
+            to_status=complaint.status
+        )
+
+        # Notification to citizen
+        Notification.objects.create(
+            user=user,
+            title="Complaint Registered Successfully",
+            message=f"Your complaint ticket {complaint.tracking_id} has been logged.",
+            complaint=complaint
+        )
+
+        # Check duplicate
+        duplicates = check_possible_duplicates(complaint, Complaint.objects.all())
+        if duplicates:
+            complaint.ai_duplicate_suspect = True
+            complaint.duplicate_of = duplicates[0]
+            complaint.save(update_fields=['ai_duplicate_suspect', 'duplicate_of'])
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def update_status(self, request, pk=None):
+        complaint = self.get_object()
+        new_status = request.data.get('status')
+        notes = request.data.get('notes', '')
+
+        if not new_status:
+            return Response({"error": "Status is required"}, status=400)
+
+        old_status = complaint.status
+        complaint.status = new_status
+        if notes:
+            complaint.resolution_notes = notes
+        if new_status == ComplaintStatus.RESOLVED:
+            complaint.resolution_date = timezone.now()
+        complaint.save()
+
+        # Record timeline
+        ComplaintTimeline.objects.create(
+            complaint=complaint,
+            performed_by=request.user,
+            action=f"Status changed to {complaint.get_status_display()}",
+            details=notes,
+            from_status=old_status,
+            to_status=new_status
+        )
+
+        # Citizen notification
+        Notification.objects.create(
+            user=complaint.citizen,
+            title=f"Complaint Update: {complaint.tracking_id}",
+            message=f"Status has been updated to '{complaint.get_status_display()}'. Notes: {notes}",
+            complaint=complaint
+        )
+
+        return Response(ComplaintSerializer(complaint).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def assign_staff(self, request, pk=None):
+        complaint = self.get_object()
+        staff_id = request.data.get('staff_id')
+        try:
+            staff_user = User.objects.get(id=staff_id)
+            complaint.assigned_staff = staff_user
+            complaint.assigned_at = timezone.now()
+            complaint.status = ComplaintStatus.ASSIGNED
+            complaint.save()
+
+            ComplaintTimeline.objects.create(
+                complaint=complaint,
+                performed_by=request.user,
+                action=f"Assigned to {staff_user.username}",
+                details="Staff member assigned for resolution."
+            )
+
+            # Notify Staff
+            Notification.objects.create(
+                user=staff_user,
+                title="New Task Assigned",
+                message=f"You have been assigned to handle complaint {complaint.tracking_id}.",
+                complaint=complaint
+            )
+
+            return Response(ComplaintSerializer(complaint).data)
+        except User.DoesNotExist:
+            return Response({"error": "Staff user not found"}, status=404)
+
+class AIAnalysisView(viewsets.GenericViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['post'])
+    def process_text(self, request):
+        text = request.data.get('text', '')
+        history = request.data.get('history', [])
+        if not text:
+            return Response({"error": "Text is required"}, status=400)
+        
+        result = analyze_complaint_text(text, conversation_history=history)
+        # Attempt to map to backend Category and Department
+        cat_obj = ComplaintCategory.objects.filter(name__icontains=result.get('category')).first()
+        dept_obj = cat_obj.department if cat_obj else None
+
+        result['matched_category_id'] = cat_obj.id if cat_obj else None
+        result['matched_department_name'] = dept_obj.name if dept_obj else None
+
+        return Response(result)
+
+class EvidenceUploadView(viewsets.ModelViewSet):
+    queryset = ComplaintEvidence.objects.all()
+    serializer_class = ComplaintEvidenceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        evidence = serializer.save(uploaded_by=self.request.user)
+        # Auto-run AI image description if it is an image
+        if evidence.file_type == 'image' and evidence.file:
+            res = analyze_image_evidence(evidence.file.path)
+            evidence.ai_analysis_description = res.get('analysis', '')
+            evidence.save(update_fields=['ai_analysis_description'])
+
+class AnalyticsViewSet(viewsets.GenericViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        total = Complaint.objects.count()
+        resolved = Complaint.objects.filter(status=ComplaintStatus.RESOLVED).count()
+        in_progress = Complaint.objects.filter(status=ComplaintStatus.IN_PROGRESS).count()
+        pending = Complaint.objects.filter(status__in=[ComplaintStatus.SUBMITTED, ComplaintStatus.ACKNOWLEDGED, ComplaintStatus.ASSIGNED]).count()
+
+        category_distribution = Complaint.objects.values('category__name').annotate(count=Count('id'))
+        status_distribution = Complaint.objects.values('status').annotate(count=Count('id'))
+
+        return Response({
+            "total_complaints": total,
+            "resolved_complaints": resolved,
+            "in_progress_complaints": in_progress,
+            "pending_complaints": pending,
+            "resolution_rate": round((resolved / total * 100), 1) if total > 0 else 0,
+            "category_breakdown": category_distribution,
+            "status_breakdown": status_distribution
+        })
