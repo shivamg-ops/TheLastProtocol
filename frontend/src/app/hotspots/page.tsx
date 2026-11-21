@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -12,8 +13,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Layers,
-  CheckCircle,
-  Filter
+  Lock
 } from "lucide-react";
 
 // Dynamically import Leaflet Map with SSR disabled
@@ -30,11 +30,33 @@ const LocationIntelligenceMap = dynamic(
 );
 
 export default function HotspotsPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [locationData, setLocationData] = useState<any>(null);
   const [predictiveHotspots, setPredictiveHotspots] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [selectedHotspot, setSelectedHotspot] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        setUser(u);
+        if (u.role !== "admin" && u.role !== "staff") {
+          setErrorMsg("Access Denied: Hotspot geospatial intelligence is strictly restricted to Municipal Administrators and Field Staff.");
+        }
+      } else {
+        setErrorMsg("Authentication required. Please sign in with an authorized officer account.");
+      }
+    } catch {
+      setErrorMsg("Session validation error.");
+    } finally {
+      setAuthChecked(true);
+    }
+  }, []);
 
   const fetchHotspotIntelligence = async () => {
     setLoading(true);
@@ -48,15 +70,53 @@ export default function HotspotsPage() {
       setPredictiveHotspots(predRes.data.hotspot_risk_scores || []);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Failed to load geospatial hotspot data. Ensure you have administrative permissions.");
+      if (err.response?.status === 403 || err.response?.status === 401) {
+        setErrorMsg("Access Denied: You do not have municipal clearance to view geospatial hotspot data.");
+      } else {
+        setErrorMsg("Failed to load geospatial hotspot data. Ensure backend service is reachable.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchHotspotIntelligence();
-  }, []);
+    if (authChecked && user && (user.role === "admin" || user.role === "staff")) {
+      fetchHotspotIntelligence();
+    }
+  }, [authChecked, user]);
+
+  if (authChecked && (!user || (user.role !== "admin" && user.role !== "staff"))) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#FAFAF9]">
+        <Navbar />
+        <main className="w-full max-w-xl mx-auto px-4 py-20 flex-1 flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-red-100 text-[#DC2626] flex items-center justify-center mb-4 shadow-sm border border-red-200">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Restricted Municipal Area</h1>
+          <p className="text-xs text-gray-600 mb-6 leading-relaxed">
+            Geospatial Hotspot Mapping and Density Telemetry contain sensitive municipal jurisdiction data and are only accessible by verified Administrators and Municipal Staff.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/login")}
+              className="px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg shadow-sm transition"
+            >
+              Sign In as Municipal Officer
+            </button>
+            <button
+              onClick={() => router.push("/")}
+              className="px-4 py-2 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg shadow-sm transition"
+            >
+              Return Home
+            </button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[#FAFAF9]">

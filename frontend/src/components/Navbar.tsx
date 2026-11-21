@@ -91,23 +91,28 @@ export default function Navbar() {
               <Bot className="w-3.5 h-3.5 text-[#DC2626]" /> AI Assistant
             </Link>
 
-            <Link
-              href="/hotspots"
-              className={`transition hover:text-white flex items-center gap-1 ${
-                pathname === "/hotspots" ? "text-[#DC2626] font-bold" : "text-gray-300"
-              }`}
-            >
-              <MapPin className="w-3.5 h-3.5 text-[#DC2626]" /> Hotspot Map
-            </Link>
+            {/* Role-Protected Navigation Links: Staff & Admin Only */}
+            {user && (user.role === "admin" || user.role === "staff") && (
+              <>
+                <Link
+                  href="/hotspots"
+                  className={`transition hover:text-white flex items-center gap-1 ${
+                    pathname === "/hotspots" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5 text-[#DC2626]" /> Hotspot Map
+                </Link>
 
-            <Link
-              href="/roster"
-              className={`transition hover:text-white flex items-center gap-1 ${
-                pathname === "/roster" ? "text-[#DC2626] font-bold" : "text-gray-300"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5 text-[#DC2626]" /> Staff Roster
-            </Link>
+                <Link
+                  href="/roster"
+                  className={`transition hover:text-white flex items-center gap-1 ${
+                    pathname === "/roster" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-[#DC2626]" /> Staff Roster
+                </Link>
+              </>
+            )}
 
             {/* If user is logged in, show their personal Dashboard link */}
             {user && (
