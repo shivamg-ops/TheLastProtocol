@@ -62,3 +62,4 @@ volumes:
   postgres_data:
   media_data:
   static_data:
+

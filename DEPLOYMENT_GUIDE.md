@@ -202,3 +202,4 @@ If a deployment introduces regressions or unexpected errors:
    curl -f http://localhost:8000/api/health/ || echo "Backend Unhealthy"
    curl -f http://localhost:3000/ || echo "Frontend Unhealthy"
    ```
+
