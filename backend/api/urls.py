@@ -4,11 +4,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     RegisterView, UserProfileView, DepartmentViewSet,
     ComplaintCategoryViewSet, ComplaintViewSet, AIAnalysisView,
-    EvidenceUploadView, AnalyticsViewSet
+    EvidenceUploadView, AnalyticsViewSet, NotificationViewSet, AuthOTPViewSet
 )
 
 router = DefaultRouter()
 router.register(r'auth/register', RegisterView, basename='register')
+router.register(r'auth/otp', AuthOTPViewSet, basename='auth-otp')
+router.register(r'notifications', NotificationViewSet, basename='notifications')
 router.register(r'departments', DepartmentViewSet, basename='departments')
 router.register(r'categories', ComplaintCategoryViewSet, basename='categories')
 router.register(r'complaints', ComplaintViewSet, basename='complaints')

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Mic, LogOut, LayoutDashboard } from "lucide-react";
 import { useEffect, useState } from "react";
+import NotificationBell from "./NotificationBell";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -107,6 +108,7 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center gap-2.5">
+                <NotificationBell />
                 <span className="text-[11px] bg-gray-800 border border-gray-700 px-2.5 py-1 rounded-full text-gray-300 font-medium">
                   {user.username}{" "}
                   <strong className="text-[#A94D37] capitalize font-semibold">

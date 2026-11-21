@@ -164,6 +164,26 @@ class CitizenFeedback(models.Model):
     resolution_satisfaction = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+class EmailOTP(models.Model):
+    PURPOSE_CHOICES = [
+        ('signup', 'Signup Verification'),
+        ('login', 'Login Verification'),
+        ('reset_password', 'Password Reset'),
+    ]
+    email = models.EmailField(db_index=True)
+    otp = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='login')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def is_valid(self):
+        from django.utils import timezone
+        return not self.is_used and timezone.now() <= self.expires_at
+
+    def __str__(self):
+        return f"OTP for {self.email} ({self.purpose}) - Used: {self.is_used}"
+
 class Subscription(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='subscription')
     tier = models.CharField(max_length=20, choices=SubscriptionTier.choices, default=SubscriptionTier.FREE)
