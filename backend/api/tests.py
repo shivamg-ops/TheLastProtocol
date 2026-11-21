@@ -2250,8 +2250,9 @@ class JanSahayakAPITests(TestCase):
         chowk_recur = next((r for r in recurring if "Shivaji Chowk" in r["location_label"]), recurring[0])
         self.assertEqual(chowk_recur["category_name"], cat_leak.name)
         self.assertGreaterEqual(chowk_recur["total_complaint_count"], 2)
-        # Verify duplicate vs independent count distinction
-        self.assertGreaterEqual(chowk_recur["duplicate_reports_count"], 1)
+        # Verify confirmed vs suspected duplicate vs independent count distinction
+        self.assertGreaterEqual(chowk_recur["confirmed_duplicate_count"], 1)
+        self.assertEqual(chowk_recur["suspected_duplicate_count"], 0)
         self.assertGreaterEqual(chowk_recur["independent_incidents_count"], 1)
 
         # 5. Forecast with Sufficient Historical Data (>= 7 distinct days)
@@ -2328,6 +2329,143 @@ class JanSahayakAPITests(TestCase):
         self.assertNotIn("testcitizen", serialized_str)
         self.assertNotIn("testpassword", serialized_str)
         self.assertNotIn("admin@test.com", serialized_str)
+
+        # 16. Dedicated Velocity Acceleration Tests (Task 20 Logic Corrections)
+        # Test all four scenarios:
+        # a) Increasing volume (C_curr > C_prev)
+        # b) Decreasing volume (C_curr < C_prev)
+        # c) Unchanged volume (C_curr == C_prev > 0)
+        # d) Zero volume (C_curr == 0 and C_prev == 0)
+        from .predictive_intelligence import calculate_hotspot_risk_scores, detect_recurring_problems
+
+        # Build mock cluster complaints for velocity testing
+        # Center lat/lng near Shivaji Chowk
+        base_lat, base_lng = 19.0760, 72.8777
+        
+        # Scenario A: Increasing volume (C_curr=4, C_prev=2)
+        # delta = +2, max(4,2) = 4, shift = 2/(2*4) = 0.25 -> growth_factor = 0.75
+        complaints_inc = []
+        for i in range(4):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Inc Curr {i}", description="Test",
+                address="Shivaji Chowk", department=dept_water, category=cat_leak,
+                latitude=base_lat + 0.0001, longitude=base_lng + 0.0001, status=ComplaintStatus.SUBMITTED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=2))
+            complaints_inc.append(c)
+        for i in range(2):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Inc Prev {i}", description="Test",
+                address="Shivaji Chowk", department=dept_water, category=cat_leak,
+                latitude=base_lat + 0.0001, longitude=base_lng + 0.0001, status=ComplaintStatus.RESOLVED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=20))
+            complaints_inc.append(c)
+
+        scores_inc = calculate_hotspot_risk_scores(Complaint.objects.filter(id__in=[c.id for c in complaints_inc]))
+        self.assertGreaterEqual(len(scores_inc), 1)
+        self.assertEqual(scores_inc[0]["current_14d_count"], 4)
+        self.assertEqual(scores_inc[0]["previous_14d_count"], 2)
+        self.assertTrue(any("Increasing velocity" in f for f in scores_inc[0]["contributing_factors"]))
+
+        # Scenario B: Decreasing volume (C_curr=1, C_prev=3)
+        # delta = -2, max(1,3) = 3, shift = -2/6 = -0.333 -> growth_factor = 0.167
+        complaints_dec = []
+        c_dec_curr = Complaint.objects.create(
+            citizen=self.citizen, title="Dec Curr", description="Test",
+            address="Shivaji Chowk Dec", department=dept_water, category=cat_leak,
+            latitude=19.1000, longitude=72.8500, status=ComplaintStatus.SUBMITTED
+        )
+        Complaint.objects.filter(id=c_dec_curr.id).update(created_at=now - timedelta(days=3))
+        complaints_dec.append(c_dec_curr)
+        for i in range(3):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Dec Prev {i}", description="Test",
+                address="Shivaji Chowk Dec", department=dept_water, category=cat_leak,
+                latitude=19.1000, longitude=72.8500, status=ComplaintStatus.RESOLVED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=22))
+            complaints_dec.append(c)
+
+        scores_dec = calculate_hotspot_risk_scores(Complaint.objects.filter(id__in=[c.id for c in complaints_dec]))
+        self.assertGreaterEqual(len(scores_dec), 1)
+        self.assertEqual(scores_dec[0]["current_14d_count"], 1)
+        self.assertEqual(scores_dec[0]["previous_14d_count"], 3)
+        self.assertTrue(any("Decreasing velocity" in f for f in scores_dec[0]["contributing_factors"]))
+
+        # Scenario C: Unchanged volume (C_curr=2, C_prev=2)
+        # delta = 0 -> shift = 0 -> growth_factor = 0.5
+        complaints_unc = []
+        for i in range(2):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Unc Curr {i}", description="Test",
+                address="Shivaji Chowk Unc", department=dept_water, category=cat_leak,
+                latitude=19.2000, longitude=72.8600, status=ComplaintStatus.SUBMITTED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=5))
+            complaints_unc.append(c)
+        for i in range(2):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Unc Prev {i}", description="Test",
+                address="Shivaji Chowk Unc", department=dept_water, category=cat_leak,
+                latitude=19.2000, longitude=72.8600, status=ComplaintStatus.RESOLVED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=25))
+            complaints_unc.append(c)
+
+        scores_unc = calculate_hotspot_risk_scores(Complaint.objects.filter(id__in=[c.id for c in complaints_unc]))
+        self.assertGreaterEqual(len(scores_unc), 1)
+        self.assertEqual(scores_unc[0]["current_14d_count"], 2)
+        self.assertEqual(scores_unc[0]["previous_14d_count"], 2)
+        self.assertTrue(any("Unchanged velocity" in f for f in scores_unc[0]["contributing_factors"]))
+
+        # Scenario D: Zero volume in both periods (historical complaints older than 28 days)
+        complaints_zero = []
+        for i in range(3):
+            c = Complaint.objects.create(
+                citizen=self.citizen, title=f"Zero Old {i}", description="Test",
+                address="Shivaji Chowk Zero", department=dept_water, category=cat_leak,
+                latitude=19.3000, longitude=72.8700, status=ComplaintStatus.RESOLVED
+            )
+            Complaint.objects.filter(id=c.id).update(created_at=now - timedelta(days=40))
+            complaints_zero.append(c)
+
+        scores_zero = calculate_hotspot_risk_scores(Complaint.objects.filter(id__in=[c.id for c in complaints_zero]))
+        self.assertGreaterEqual(len(scores_zero), 1)
+        self.assertEqual(scores_zero[0]["current_14d_count"], 0)
+        self.assertEqual(scores_zero[0]["previous_14d_count"], 0)
+        self.assertTrue(any("Zero complaints in past 28 days" in f for f in scores_zero[0]["contributing_factors"]))
+
+        # 17. Dedicated Recurring Problem Duplicate Distinction Tests
+        # Test cluster with 1 primary, 1 confirmed duplicate (duplicate_of set), 1 suspected duplicate (ai_duplicate_suspect=True, duplicate_of=None)
+        c_primary = Complaint.objects.create(
+            citizen=self.citizen, title="Primary Leak", description="Main pipe burst",
+            address="Test Park", department=dept_water, category=cat_leak,
+            latitude=19.4000, longitude=72.8800, status=ComplaintStatus.SUBMITTED
+        )
+        c_confirmed = Complaint.objects.create(
+            citizen=self.other_citizen, title="Confirmed Dup", description="Same leak duplicate",
+            address="Test Park", department=dept_water, category=cat_leak,
+            latitude=19.4001, longitude=72.8801, status=ComplaintStatus.SUBMITTED,
+            duplicate_of=c_primary
+        )
+        c_suspected = Complaint.objects.create(
+            citizen=self.citizen, title="Suspected Dup", description="Water on ground",
+            address="Test Park", department=dept_water, category=cat_leak,
+            latitude=19.4002, longitude=72.8802, status=ComplaintStatus.SUBMITTED,
+            ai_duplicate_suspect=True,
+            duplicate_of=None
+        )
+
+        recurring_res = detect_recurring_problems(Complaint.objects.filter(id__in=[c_primary.id, c_confirmed.id, c_suspected.id]))
+        self.assertEqual(len(recurring_res), 1)
+        rec_item = recurring_res[0]
+        self.assertEqual(rec_item["total_complaint_count"], 3)
+        self.assertEqual(rec_item["confirmed_duplicate_count"], 1)
+        self.assertEqual(rec_item["suspected_duplicate_count"], 1)
+        self.assertEqual(rec_item["independent_incidents_count"], 2)  # 3 total - 1 confirmed duplicate = 2 independent
+        self.assertIn("1 confirmed duplicate reports", rec_item["explanation"])
+        self.assertIn("1 suspected duplicates awaiting verification", rec_item["explanation"])
 
 
 

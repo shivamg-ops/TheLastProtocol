@@ -855,7 +855,17 @@ export default function AdminPage() {
                       <p className="text-[10px] text-gray-500 mt-0.5 truncate">{rp.location_label}</p>
                       <div className="mt-1 text-[9px] text-gray-400 flex items-center justify-between border-t border-gray-100 pt-1">
                         <span>{rp.independent_incidents_count} incidents</span>
-                        <span className="text-amber-700 font-semibold">{rp.duplicate_reports_count} follow-up duplicates</span>
+                        <div className="flex gap-1.5 font-semibold">
+                          {rp.confirmed_duplicate_count > 0 && (
+                            <span className="text-amber-700">{rp.confirmed_duplicate_count} confirmed</span>
+                          )}
+                          {rp.suspected_duplicate_count > 0 && (
+                            <span className="text-purple-700">{rp.suspected_duplicate_count} suspected</span>
+                          )}
+                          {rp.confirmed_duplicate_count === 0 && rp.suspected_duplicate_count === 0 && (
+                            <span className="text-gray-400">0 duplicates</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))

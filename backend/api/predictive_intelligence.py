@@ -191,9 +191,15 @@ def detect_recurring_problems(
                 visited.add(c2['id'])
 
         if len(cluster) >= min_recurrence_count:
-            # Distinguish duplicates vs recurring separate incidents
-            duplicate_count = sum(1 for m in cluster if m.get('ai_duplicate_suspect') or m.get('duplicate_of_id'))
-            independent_incident_count = len(cluster) - duplicate_count
+            # Task 20: Separate Confirmed and Suspected Duplicates
+            # 1. Confirmed duplicate: Explicit duplicate relationship established by system or admin review (duplicate_of_id is set)
+            # 2. Suspected duplicate: Flagged by AI perceptual/text detection (ai_duplicate_suspect=True) but not yet formally linked
+            # 3. Independent incident: Neither confirmed nor suspected duplicate
+            confirmed_duplicate_count = sum(1 for m in cluster if m.get('duplicate_of_id'))
+            suspected_duplicate_count = sum(1 for m in cluster if m.get('ai_duplicate_suspect') and not m.get('duplicate_of_id'))
+            
+            # Confirmed duplicates belong to an existing incident chain; suspected duplicates remain potential incidents pending review
+            independent_incident_count = len(cluster) - confirmed_duplicate_count
 
             # Calculate time span of recurrence
             dates = [m['created_at'] for m in cluster if m.get('created_at')]
@@ -207,6 +213,15 @@ def detect_recurring_problems(
             cat_name = cluster[0]['category_name'] or "General Civic Issue"
             loc_label = cluster[0]['address'] or f"Coordinates ({centroid_lat}, {centroid_lng})"
 
+            explanation_parts = [
+                f"{len(cluster)} complaints recorded in this locality for {cat_name}.",
+                f"Consists of {independent_incident_count} independent incidents"
+            ]
+            if confirmed_duplicate_count > 0:
+                explanation_parts.append(f"{confirmed_duplicate_count} confirmed duplicate reports")
+            if suspected_duplicate_count > 0:
+                explanation_parts.append(f"{suspected_duplicate_count} suspected duplicates awaiting verification")
+
             recurring_groups.append({
                 "problem_id": f"REC-{len(recurring_groups) + 1:03d}",
                 "category_name": cat_name,
@@ -214,16 +229,13 @@ def detect_recurring_problems(
                 "centroid_latitude": centroid_lat,
                 "centroid_longitude": centroid_lng,
                 "total_complaint_count": len(cluster),
-                "duplicate_reports_count": duplicate_count,
+                "confirmed_duplicate_count": confirmed_duplicate_count,
+                "suspected_duplicate_count": suspected_duplicate_count,
                 "independent_incidents_count": max(1, independent_incident_count),
                 "is_persistent": date_span_days >= 7,
                 "timespan_days": date_span_days,
                 "tracking_ids": [m['tracking_id'] for m in cluster],
-                "explanation": (
-                    f"{len(cluster)} complaints recorded in this locality for {cat_name}. "
-                    f"Consists of {max(1, independent_incident_count)} separate incidents and "
-                    f"{duplicate_count} repeated citizen follow-up/duplicate filings."
-                )
+                "explanation": " ".join(explanation_parts)
             })
 
     recurring_groups.sort(key=lambda x: x["total_complaint_count"], reverse=True)
@@ -383,7 +395,8 @@ def calculate_hotspot_risk_scores(
 
     scored_hotspots = []
     now = timezone.now()
-    two_weeks_ago = now - timedelta(days=14)
+    current_14_days_ago = now - timedelta(days=14)
+    previous_28_days_ago = now - timedelta(days=28)
 
     for cluster in raw_clusters:
         member_ids = set(cluster["complaint_ids"])
@@ -393,11 +406,36 @@ def calculate_hotspot_risk_scores(
         # 1. Volume Factor (Normalized between 0 and 1: 10+ complaints = 1.0)
         volume_factor = min(1.0, max(0.0, n_members / 10.0))
 
-        # 2. Recent Velocity Factor (Normalized between 0 and 1):
-        # Measures recent influx scaled by cluster size.
-        # If there are no recent complaints, velocity is 0.0 (does not reward low volume).
-        recent_count = sum(1 for m in members if m["created_at"] and m["created_at"] >= two_weeks_ago)
-        growth_factor = min(1.0, max(0.0, recent_count / max(1, n_members)))
+        # 2. Velocity / Acceleration Factor (Normalized between 0 and 1):
+        # Compares Current 14-day count (C_curr) against Previous 14-day count (C_prev).
+        # Formula:
+        #   delta = C_curr - C_prev
+        #   If both periods have 0 complaints: acceleration = 0.0
+        #   If C_prev == 0 and C_curr > 0: acceleration = min(1.0, C_curr / 6.0) (scaled by magnitude to prevent small samples from spiking)
+        #   Else: acceleration = min(1.0, max(0.0, 0.5 + (delta / (2 * max(C_curr, C_prev)))))
+        # Where:
+        #   - delta > 0 (increasing volume): 0.5 < acceleration <= 1.0
+        #   - delta == 0 (unchanged volume): acceleration = 0.5
+        #   - delta < 0 (decreasing volume): 0.0 <= acceleration < 0.5
+        c_curr = sum(1 for m in members if m["created_at"] and m["created_at"] >= current_14_days_ago)
+        c_prev = sum(1 for m in members if m["created_at"] and current_14_days_ago > m["created_at"] >= previous_28_days_ago)
+
+        if c_curr == 0 and c_prev == 0:
+            growth_factor = 0.0
+            velocity_desc = "Zero complaints in past 28 days"
+        elif c_prev == 0:
+            growth_factor = min(1.0, c_curr / 6.0)
+            velocity_desc = f"New localized influx ({c_curr} complaints in current 14 days vs 0 in previous period)"
+        else:
+            delta = c_curr - c_prev
+            relative_shift = delta / (2.0 * max(c_curr, c_prev))
+            growth_factor = min(1.0, max(0.0, 0.5 + relative_shift))
+            if delta > 0:
+                velocity_desc = f"Increasing velocity: {c_curr} in current 14 days vs {c_prev} in previous (+{delta})"
+            elif delta < 0:
+                velocity_desc = f"Decreasing velocity: {c_curr} in current 14 days vs {c_prev} in previous ({delta})"
+            else:
+                velocity_desc = f"Unchanged velocity: {c_curr} complaints in both 14-day periods"
 
         # 3. Recurrence Density Factor (Normalized between 0 and 1: 6+ complaints = 1.0)
         recurrence_factor = min(1.0, max(0.0, n_members / 6.0))
@@ -430,8 +468,7 @@ def calculate_hotspot_risk_scores(
         # Factors breakdown for transparency
         factors = []
         factors.append(f"{n_members} complaints clustered within {cluster['radius_meters']}m radius")
-        if recent_count > 0:
-            factors.append(f"{recent_count} complaints logged recently (last 14 days)")
+        factors.append(velocity_desc)
         if overdue_count > 0:
             factors.append(f"{overdue_count} unresolved tickets past SLA deadline")
         factors.append(f"Dominant civic issue: {cluster['primary_category']}")
@@ -444,8 +481,8 @@ def calculate_hotspot_risk_scores(
             "risk_level": level,
             "primary_category": cluster["primary_category"],
             "complaint_count": n_members,
-            "recent_complaint_count": recent_count,
-            "overdue_complaint_count": overdue_count,
+            "current_14d_count": c_curr,
+            "previous_14d_count": c_prev,
             "contributing_factors": factors,
             "is_approximate_centroid": True
         })
@@ -487,20 +524,26 @@ def generate_preventive_recommendations(
             "category": cat,
             "risk_level": hs["risk_level"],
             "suggested_action": action,
-            "supporting_metric": f"Risk Score {hs['risk_score']}/100 based on {hs['complaint_count']} complaints ({hs['recent_complaint_count']} recent)",
+            "supporting_metric": f"Risk Score {hs['risk_score']}/100 based on {hs['complaint_count']} complaints ({hs['current_14d_count']} recent in 14d vs {hs['previous_14d_count']} prior)",
             "confidence_level": "High (Empirical Spatial Cluster)"
         })
 
     # 2. Recurring Problem Interventions
     for prob in recurring_problems[:2]:
         if prob["total_complaint_count"] >= 3:
+            duplicate_info = []
+            if prob.get("confirmed_duplicate_count", 0) > 0:
+                duplicate_info.append(f"{prob['confirmed_duplicate_count']} confirmed duplicates")
+            if prob.get("suspected_duplicate_count", 0) > 0:
+                duplicate_info.append(f"{prob['suspected_duplicate_count']} suspected duplicates")
+            dup_str = f" ({', '.join(duplicate_info)})" if duplicate_info else ""
             recommendations.append({
                 "id": f"REC-PRB-{prob['problem_id']}",
                 "title": f"Recurring Incident Resolution: {prob['category_name']}",
                 "category": prob["category_name"],
                 "risk_level": "medium",
                 "suggested_action": f"Conduct permanent infrastructure fix for persistent issue at {prob['location_label']} to eliminate repeated filings.",
-                "supporting_metric": f"{prob['total_complaint_count']} reports recorded over {prob['timespan_days']} days ({prob['duplicate_reports_count']} citizen duplicate reports)",
+                "supporting_metric": f"{prob['total_complaint_count']} reports recorded over {prob['timespan_days']} days ({prob['independent_incidents_count']} independent incidents{dup_str})",
                 "confidence_level": "High (Verified Repetition)"
             })
 
