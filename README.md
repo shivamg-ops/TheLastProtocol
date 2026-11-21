@@ -16,6 +16,35 @@ JanSahayak AI empowers citizens to report civic grievances through speech, multi
 
 ## 🏗️ Architecture & Modules
 
+### End-to-End System Flowchart
+```mermaid
+flowchart TD
+    A["Citizen opens JanSahayak"] --> B["Login / Register"]
+    B --> C["AI Interface"]
+    C --> D{"Input Type"}
+    D --> E["Text"]
+    D --> F["Voice"]
+    D --> G["Photo"]
+    D --> H["Video"]
+    E --> I["AI Complaint Understanding"]
+    F --> J["Speech to Text"]
+    J --> I
+    G --> I
+    H --> I
+    I --> K["Extract Category and Location"]
+    K --> L["Ask Missing Questions"]
+    L --> M["Show Complaint Preview"]
+    M --> N{"User Confirms?"}
+    N -->|No| L
+    N -->|Yes| O["Create Complaint Ticket"]
+    O --> P["Save in PostgreSQL"]
+    O --> Q["Notify Admin"]
+    P --> R["Citizen Tracks Complaint"]
+    Q --> S["Admin Reviews and Assigns"]
+    S --> T["Update Status"]
+    T --> R
+```
+
 ### 1. Backend (`/backend`)
 - **Framework**: Python Django, Django REST Framework, SimpleJWT
 - **Database**: SQLite (Ready for PostgreSQL swap via `.env`)
@@ -43,10 +72,21 @@ JanSahayak AI empowers citizens to report civic grievances through speech, multi
 ## 🚀 Quick Start Guide
 
 ### Step 1: Start Backend Server
-```bash
+
+> **Note on Windows / PowerShell**: Always activate the virtual environment (`venv`) before running `manage.py`, or invoke `venv\Scripts\python.exe` directly so all dependencies are found.
+
+**Option A: Virtual Environment (Recommended)**
+```powershell
 cd backend
-source venv/bin/activate
+.\venv\Scripts\Activate.ps1
+# or on CMD: venv\Scripts\activate.bat
 python manage.py runserver 8000
+```
+
+**Option B: Direct Virtual Environment Python (No activation needed)**
+```powershell
+cd backend
+.\venv\Scripts\python.exe manage.py runserver 8000
 ```
 Backend API will be accessible at: `http://127.0.0.1:8000/api/`
 
