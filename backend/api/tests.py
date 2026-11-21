@@ -676,6 +676,210 @@ class JanSahayakAPITests(TestCase):
             if os.path.exists(valid_img_f.name):
                 os.remove(valid_img_f.name)
 
+    def test_smart_duplicate_complaint_detection(self):
+        from .models import Complaint, ComplaintEvidence
+        from .duplicate_detector import DuplicateDetector, compute_text_similarity, compute_location_similarity
+
+        # 1. Base Complaint in Category "Roads and Potholes"
+        c1 = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Deep crater on Station Road",
+            description="Bahut bada gaddha hai station road par accident ho sakta hai",
+            category=self.category,
+            address="Station Road near Metro Pillar 42",
+            landmark="Metro Pillar 42",
+            ward_or_zone="Ward 4"
+        )
+
+        # 2. Same Text, Same Location, Same Category -> Flagged as duplicate
+        c_same = Complaint(
+            citizen=self.other_citizen,
+            title="Crater on Station Road",
+            description="Bahut bada gaddha hai station road par accident ho sakta hai",
+            category=self.category,
+            address="Station Road near Metro Pillar 42",
+            landmark="Metro Pillar 42",
+            ward_or_zone="Ward 4"
+        )
+        res_same = DuplicateDetector.find_duplicate(c_same)
+        self.assertTrue(res_same["is_possible_duplicate"])
+        self.assertEqual(res_same["matched_complaint_id"], c1.id)
+        self.assertEqual(res_same["matched_tracking_id"], c1.tracking_id)
+        self.assertGreaterEqual(res_same["similarity_score"], 0.85)
+
+        # 3. Similar Text but Completely Different Location (Station Road vs Airport Highway)
+        # Invariant: Must NOT be marked duplicate simply because description is similar
+        c_diff_loc = Complaint(
+            citizen=self.other_citizen,
+            title="Pothole on Highway",
+            description="Bahut bada gaddha hai highway road par accident ho sakta hai",
+            category=self.category,
+            address="Airport Highway Terminal 2",
+            landmark="Terminal 2",
+            ward_or_zone="Ward 18"
+        )
+        res_diff_loc = DuplicateDetector.find_duplicate(c_diff_loc)
+        self.assertFalse(res_diff_loc["is_possible_duplicate"])
+        self.assertIsNone(res_diff_loc["matched_complaint_id"])
+
+        # 4. Same Category but Unrelated Description
+        c_unrelated = Complaint(
+            citizen=self.other_citizen,
+            title="Speed breaker broken",
+            description="Speed breaker paints have completely faded out",
+            category=self.category,
+            address="Station Road near Metro Pillar 42",
+            landmark="Metro Pillar 42"
+        )
+        res_unrelated = DuplicateDetector.find_duplicate(c_unrelated)
+        self.assertFalse(res_unrelated["is_possible_duplicate"])
+
+        # 5. Different Wording for Similar Issue in Same Location (Hindi / Hinglish variation)
+        c_reworded = Complaint(
+            citizen=self.other_citizen,
+            title="Dangerous pothole",
+            description="Station road par bohot bada gaddha pada hai koi gir jayega",
+            category=self.category,
+            address="Station Road near Metro Pillar 42",
+            landmark="Metro Pillar 42"
+        )
+        res_reworded = DuplicateDetector.find_duplicate(c_reworded)
+        self.assertTrue(res_reworded["is_possible_duplicate"])
+        self.assertEqual(res_reworded["matched_complaint_id"], c1.id)
+
+        # 6. Missing Location Safeguard: Missing location is never treated as a matching location
+        c_no_loc = Complaint(
+            citizen=self.other_citizen,
+            title="Pothole problem",
+            description="Bahut bada gaddha hai road par",
+            category=self.category,
+            address=""
+        )
+        loc_score = compute_location_similarity(c_no_loc, c1)
+        self.assertEqual(loc_score, 0.0)
+
+        # 7. Image Duplicate Signal Integration
+        # If visual evidence matches exactly (SHA-256), flags as duplicate even with slight description changes
+        ev1 = ComplaintEvidence.objects.create(
+            complaint=c1,
+            file=SimpleUploadedFile("img1.jpg", b"EVIDENCE_IMAGE_BYTES_123", content_type="image/jpeg"),
+            file_type="image",
+            sha256_hash="abc123sha256hash",
+            phash="phash12345"
+        )
+
+        c_with_same_img = Complaint.objects.create(
+            citizen=self.other_citizen,
+            title="Pothole picture",
+            description="Grievance with identical photo proof",
+            category=self.category,
+            address="Station Road",
+            landmark="Metro Pillar 42"
+        )
+        ev2 = ComplaintEvidence.objects.create(
+            complaint=c_with_same_img,
+            file=SimpleUploadedFile("img2.jpg", b"EVIDENCE_IMAGE_BYTES_123", content_type="image/jpeg"),
+            file_type="image",
+            sha256_hash="abc123sha256hash",
+            phash="phash12345"
+        )
+
+        res_img_dup = DuplicateDetector.find_duplicate(c_with_same_img)
+        self.assertTrue(res_img_dup["is_possible_duplicate"])
+        self.assertEqual(res_img_dup["matched_complaint_id"], c1.id)
+        self.assertIn("Visual evidence match", " ".join(res_img_dup["match_reasons"]))
+
+        # 8. Invariant: Duplicate suspect must NEVER automatically be rejected
+        c_with_same_img.refresh_from_db()
+        self.assertNotEqual(c_with_same_img.status, 'rejected')
+
+    def test_smart_department_routing(self):
+        from .models import Department, ComplaintCategory, Complaint
+        from .department_router import DepartmentRouter
+
+        # 1. Correct Routing for Configured Category & Department
+        # self.category ("Garbage and Sanitation") is linked to self.dept ("Solid Waste Management")
+        res_cat = DepartmentRouter.route_complaint(
+            category=self.category,
+            description="Kachra pada hai aur safai nahi hui"
+        )
+        self.assertEqual(res_cat["routing_status"], "routed")
+        self.assertEqual(res_cat["suggested_department"]["id"], self.dept.id)
+        self.assertEqual(res_cat["suggested_department"]["name"], self.dept.name)
+        self.assertEqual(res_cat["suggested_team_id"], self.dept.id)
+        self.assertGreaterEqual(res_cat["routing_confidence"], 0.65)
+        self.assertFalse(res_cat["requires_manual_review"])
+
+        # 2. Unknown / Unmapped Category -> Falls back to description keywords
+        water_dept = Department.objects.create(name="Water Supply & Sewerage", code="WSS_TEST", sla_hours=36)
+        unmapped_cat = ComplaintCategory(name="Miscellaneous Grievance")
+        res_desc = DepartmentRouter.route_complaint(
+            category=unmapped_cat,
+            description="Severe water supply disruption and drinking water pipe burst"
+        )
+        # Should route to water department based on keywords
+        self.assertIsNotNone(res_desc["suggested_department"])
+        self.assertIn("Water", res_desc["suggested_department"]["name"])
+        self.assertEqual(res_desc["suggested_department"]["id"], water_dept.id)
+
+        # 3. Missing Department Configuration Scenario
+        # Deactivate all departments temporarily
+        Department.objects.filter(is_active=True).update(is_active=False)
+        try:
+            res_no_dept = DepartmentRouter.route_complaint(
+                category=self.category,
+                description="Streetlight broken"
+            )
+            self.assertEqual(res_no_dept["routing_status"], "manual_review_required")
+            self.assertIsNone(res_no_dept["suggested_department"])
+            self.assertIsNone(res_no_dept["suggested_team_id"])
+            self.assertTrue(res_no_dept["requires_manual_review"])
+        finally:
+            Department.objects.all().update(is_active=True)
+
+        # 4. Low-Confidence / Ambiguous Issue -> requires_manual_review = True
+        res_ambiguous = DepartmentRouter.route_complaint(
+            category=None,
+            description="Something strange happened nearby yesterday."
+        )
+        self.assertEqual(res_ambiguous["routing_status"], "manual_review_required")
+        self.assertTrue(res_ambiguous["requires_manual_review"])
+        self.assertIsNone(res_ambiguous["suggested_department"])
+
+        # 5. Visual Issue Signal Integration (e.g. image analysis detected 'pothole')
+        roads_dept = Department.objects.create(name="Roads & Infrastructure", code="RTI_TEST", sla_hours=48)
+        res_visual = DepartmentRouter.route_complaint(
+            category=None,
+            description="Road condition issue",
+            detected_issue="Road pothole"
+        )
+        self.assertIsNotNone(res_visual["suggested_department"])
+        self.assertIn("Roads", res_visual["suggested_department"]["name"])
+
+        # 6. Safety Invariant: No fake assignment is reported or executed
+        # Complaint creation does not automatically assign a staff member without admin action
+        new_comp = Complaint.objects.create(
+            citizen=self.citizen,
+            title="Leaking pipeline",
+            description="Water pipeline burst",
+            address="Ring Road",
+            category=self.category
+        )
+        self.assertIsNone(new_comp.assigned_staff)
+        self.assertNotEqual(new_comp.status, 'assigned')
+
+        # 7. Preserves Existing Admin Staff Assignment Workflow
+        self.client.force_authenticate(user=self.admin)
+        assign_resp = self.client.post(f'/api/complaints/{new_comp.id}/assign_staff/', {
+            'staff_id': self.staff.id
+        })
+        self.assertEqual(assign_resp.status_code, status.HTTP_200_OK)
+        new_comp.refresh_from_db()
+        self.assertEqual(new_comp.assigned_staff, self.staff)
+        self.assertEqual(new_comp.status, 'assigned')
+
+
+
 
 
 

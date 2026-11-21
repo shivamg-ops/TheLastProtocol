@@ -261,12 +261,25 @@ class AIAnalysisView(viewsets.GenericViewSet):
             return Response({"error": "Text is required"}, status=400)
         
         result = analyze_complaint_text(text, conversation_history=history)
-        # Attempt to map to backend Category and Department
+        # Attempt to map to backend Category and Department via DepartmentRouter
         cat_obj = ComplaintCategory.objects.filter(name__icontains=result.get('category')).first()
-        dept_obj = cat_obj.department if cat_obj else None
+        from .department_router import DepartmentRouter
+        routing_info = DepartmentRouter.route_complaint(
+            category=cat_obj,
+            description=text,
+            priority=result.get('priority', 'medium')
+        )
+
+        dept_obj = None
+        if routing_info.get("suggested_department"):
+            dept_id = routing_info["suggested_department"]["id"]
+            dept_obj = Department.objects.filter(id=dept_id).first()
+        elif cat_obj:
+            dept_obj = cat_obj.department
 
         result['matched_category_id'] = cat_obj.id if cat_obj else None
         result['matched_department_name'] = dept_obj.name if dept_obj else None
+        result['routing_recommendation'] = routing_info
 
         return Response(result)
 

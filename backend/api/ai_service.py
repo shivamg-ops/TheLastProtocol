@@ -656,17 +656,19 @@ def detect_duplicate_evidence(
     }
 
 def check_possible_duplicates(new_complaint, existing_complaints_queryset):
-    one_week_ago = timezone.now() - timedelta(days=7)
-    recent = existing_complaints_queryset.filter(
-        category=new_complaint.category,
-        created_at__gte=one_week_ago
-    ).exclude(id=new_complaint.id)
-
-    suspects = []
-    for comp in recent:
-        if new_complaint.ward_or_zone and comp.ward_or_zone and new_complaint.ward_or_zone.lower() == comp.ward_or_zone.lower():
-            suspects.append(comp)
-        elif new_complaint.landmark and comp.landmark and new_complaint.landmark.lower() in comp.landmark.lower():
-            suspects.append(comp)
-
-    return suspects
+    """
+    Backwards-compatible wrapper delegating to DuplicateDetector.
+    Returns list of suspect complaints if possible duplicate found.
+    """
+    from .duplicate_detector import DuplicateDetector
+    res = DuplicateDetector.find_duplicate(
+        new_complaint=new_complaint,
+        existing_complaints_queryset=existing_complaints_queryset
+    )
+    if res["is_possible_duplicate"] and res["matched_complaint_id"]:
+        from .models import Complaint
+        try:
+            return [Complaint.objects.get(id=res["matched_complaint_id"])]
+        except Complaint.DoesNotExist:
+            return []
+    return []
