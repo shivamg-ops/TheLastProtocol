@@ -206,7 +206,7 @@ export default function StaffPage() {
                   <div key={c.id} className="p-4 hover:bg-gray-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-[#A94D37]">{c.tracking_id}</span>
+                        <span className="font-mono text-xs font-bold text-[#DC2626]">{c.tracking_id}</span>
                         {getStatusBadge(c.status)}
                         {getPriorityBadge(c.priority)}
                         {c.sla_info?.is_overdue && (
@@ -251,7 +251,7 @@ export default function StaffPage() {
                         setStatusVal(c.status);
                         setNotesVal(c.resolution_notes || "");
                       }}
-                      className="px-3.5 py-1.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-xs font-semibold rounded-lg shadow-sm shrink-0 self-start sm:self-center transition"
+                      className="px-3.5 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg shadow-sm shrink-0 self-start sm:self-center transition"
                     >
                       Update Task
                     </button>
@@ -286,7 +286,7 @@ export default function StaffPage() {
                     <select
                       value={statusVal}
                       onChange={(e) => setStatusVal(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white font-medium"
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white font-medium"
                     >
                       <option value="in_progress">In Progress</option>
                       <option value="resolved">Resolved (Work Completed)</option>
@@ -302,7 +302,7 @@ export default function StaffPage() {
                       placeholder="Describe field actions taken (e.g., cleared 2 tons of debris, repaired broken pipeline segment)..."
                       value={notesVal}
                       onChange={(e) => setNotesVal(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
                     />
                   </div>
 
@@ -350,11 +350,11 @@ export default function StaffPage() {
                 {activeTask.timeline && activeTask.timeline.length > 0 && (
                   <div className="pt-3 border-t border-gray-100">
                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-2 flex items-center gap-1">
-                      <History className="w-3 h-3 text-[#A94D37]" /> Ticket Audit History
+                      <History className="w-3 h-3 text-[#DC2626]" /> Ticket Audit History
                     </span>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {activeTask.timeline.map((tl: any, i: number) => (
-                        <div key={i} className="text-[11px] flex items-start gap-2 border-l-2 border-[#A94D37] pl-2 py-0.5">
+                        <div key={i} className="text-[11px] flex items-start gap-2 border-l-2 border-[#DC2626] pl-2 py-0.5">
                           <div>
                             <span className="font-semibold text-gray-800 block">{tl.action}</span>
                             {tl.details && <span className="text-gray-500 text-[10px] block">{tl.details}</span>}

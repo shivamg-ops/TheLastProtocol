@@ -43,12 +43,12 @@ export default function Navbar() {
           {/* Brand Logo */}
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#A94D37] to-[#8e3e2b] flex items-center justify-center font-bold text-white shadow-md group-hover:scale-105 transition">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#DC2626] to-[#B91C1C] flex items-center justify-center font-bold text-white shadow-md group-hover:scale-105 transition">
                 JS
               </div>
               <div>
                 <span className="font-extrabold text-xl tracking-tight text-white">
-                  JANSAHAYAK <span className="text-[#A94D37]">AI</span>
+                  JANSAHAYAK <span className="text-[#DC2626]">AI</span>
                 </span>
                 <p className="text-[9px] text-gray-400 font-medium tracking-widest uppercase">
                   From Voice to Resolution
@@ -62,7 +62,7 @@ export default function Navbar() {
             <Link
               href="/"
               className={`transition hover:text-white ${
-                pathname === "/" ? "text-[#A94D37]" : "text-gray-300"
+                pathname === "/" ? "text-[#DC2626]" : "text-gray-300"
               }`}
             >
               Overview
@@ -85,10 +85,10 @@ export default function Navbar() {
             <Link
               href="/assistant"
               className={`transition hover:text-white flex items-center gap-1 ${
-                pathname === "/assistant" ? "text-[#A94D37] font-bold" : "text-gray-300"
+                pathname === "/assistant" ? "text-[#DC2626] font-bold" : "text-gray-300"
               }`}
             >
-              <Bot className="w-3.5 h-3.5 text-[#A94D37]" /> AI Assistant
+              <Bot className="w-3.5 h-3.5 text-[#DC2626]" /> AI Assistant
             </Link>
 
             {/* If user is logged in, show their personal Dashboard link */}
@@ -97,11 +97,11 @@ export default function Navbar() {
                 href={getDashboardPath(user.role)}
                 className={`flex items-center gap-1.5 transition hover:text-white ${
                   pathname.startsWith(getDashboardPath(user.role))
-                    ? "text-[#A94D37]"
+                    ? "text-[#DC2626]"
                     : "text-gray-300"
                 }`}
               >
-                <LayoutDashboard className="w-3.5 h-3.5 text-[#A94D37]" /> Dashboard
+                <LayoutDashboard className="w-3.5 h-3.5 text-[#DC2626]" /> Dashboard
               </Link>
             )}
           </div>
@@ -110,7 +110,7 @@ export default function Navbar() {
           <div className="flex items-center gap-3">
             <Link
               href="/report"
-              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-[#A94D37] to-[#8e3e2b] hover:opacity-95 text-white text-xs font-semibold rounded-lg shadow-sm transition"
+              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-[#DC2626] to-[#B91C1C] hover:opacity-95 text-white text-xs font-semibold rounded-lg shadow-sm transition"
             >
               <Mic className="w-3.5 h-3.5" /> Voice / AI Report
             </Link>
@@ -120,7 +120,7 @@ export default function Navbar() {
                 <NotificationBell />
                 <span className="text-[11px] bg-gray-800 border border-gray-700 px-2.5 py-1 rounded-full text-gray-300 font-medium">
                   {user.username}{" "}
-                  <strong className="text-[#A94D37] capitalize font-semibold">
+                  <strong className="text-[#DC2626] capitalize font-semibold">
                     ({user.role})
                   </strong>
                 </span>

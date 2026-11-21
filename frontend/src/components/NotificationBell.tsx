@@ -81,7 +81,7 @@ export default function NotificationBell() {
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#A94D37] text-[9px] font-bold text-white shadow-sm ring-2 ring-[#17191D]">
+          <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#DC2626] text-[9px] font-bold text-white shadow-sm ring-2 ring-[#17191D]">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -93,7 +93,7 @@ export default function NotificationBell() {
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-[#17191D]">Notifications</span>
               {unreadCount > 0 && (
-                <span className="text-[10px] bg-[#A94D37]/10 text-[#A94D37] font-bold px-2 py-0.5 rounded-full">
+                <span className="text-[10px] bg-[#DC2626]/10 text-[#DC2626] font-bold px-2 py-0.5 rounded-full">
                   {unreadCount} new
                 </span>
               )}
@@ -101,7 +101,7 @@ export default function NotificationBell() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-[11px] text-[#A94D37] hover:underline flex items-center gap-1 font-medium"
+                className="text-[11px] text-[#DC2626] hover:underline flex items-center gap-1 font-medium"
               >
                 <CheckCheck className="w-3.5 h-3.5" /> Mark all read
               </button>

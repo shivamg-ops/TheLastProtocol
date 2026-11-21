@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl border border-gray-200 shadow-xl">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 bg-[#A94D37] text-white rounded-xl flex items-center justify-center font-bold text-lg mx-auto mb-3 shadow">
+            <div className="w-12 h-12 bg-[#DC2626] text-white rounded-xl flex items-center justify-center font-bold text-lg mx-auto mb-3 shadow">
               <KeyRound className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-bold text-[#17191D]">Reset Password</h1>
@@ -103,7 +103,7 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your registered email"
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                   />
                 </div>
               </div>
@@ -111,7 +111,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
               >
                 {loading ? "Sending OTP..." : "Send Reset Code"} <ArrowRight className="w-4 h-4" />
               </button>
@@ -129,7 +129,7 @@ export default function ForgotPasswordPage() {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="Enter 6-digit code from email"
-                  className="w-full px-3 py-2 text-center text-lg font-mono tracking-widest border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                  className="w-full px-3 py-2 text-center text-lg font-mono tracking-widest border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                 />
               </div>
 
@@ -145,7 +145,7 @@ export default function ForgotPasswordPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Minimum 8 characters"
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                   />
                 </div>
               </div>
@@ -162,7 +162,7 @@ export default function ForgotPasswordPage() {
           )}
 
           <div className="text-center mt-6">
-            <Link href="/login" className="text-xs text-gray-500 hover:text-[#A94D37] underline">
+            <Link href="/login" className="text-xs text-gray-500 hover:text-[#DC2626] underline">
               Back to Sign In
             </Link>
           </div>

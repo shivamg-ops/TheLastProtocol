@@ -111,7 +111,7 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl border border-gray-200 shadow-xl">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 bg-[#A94D37] text-white rounded-xl flex items-center justify-center font-bold text-lg mx-auto mb-3 shadow">
+            <div className="w-12 h-12 bg-[#DC2626] text-white rounded-xl flex items-center justify-center font-bold text-lg mx-auto mb-3 shadow">
               JS
             </div>
             <h1 className="text-2xl font-bold text-[#17191D]">Sign in to JanSahayak</h1>
@@ -142,7 +142,7 @@ export default function LoginPage() {
                 setSuccessMsg("");
               }}
               className={`flex-1 py-1.5 rounded-md transition flex items-center justify-center gap-1.5 ${authMode === "otp"
-                ? "bg-white text-[#A94D37] shadow-sm"
+                ? "bg-white text-[#DC2626] shadow-sm"
                 : "text-gray-500 hover:text-gray-900"
                 }`}
             >
@@ -176,7 +176,7 @@ export default function LoginPage() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Enter your username"
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                   />
                 </div>
               </div>
@@ -186,7 +186,7 @@ export default function LoginPage() {
                   <label className="block text-xs font-semibold text-gray-700">Password</label>
                   <Link
                     href="/forgot-password"
-                    className="text-[11px] text-[#A94D37] hover:underline font-medium"
+                    className="text-[11px] text-[#DC2626] hover:underline font-medium"
                   >
                     Forgot?
                   </Link>
@@ -199,7 +199,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                   />
                 </div>
               </div>
@@ -207,7 +207,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
               >
                 {loading ? "Authenticating..." : "Sign In"} <ArrowRight className="w-4 h-4" />
               </button>
@@ -228,7 +228,7 @@ export default function LoginPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="e.g. citizen@example.com"
-                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                       />
                     </div>
                   </div>
@@ -236,7 +236,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={otpLoading}
-                    className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2"
                   >
                     {otpLoading ? "Sending OTP via Gmail..." : "Send Verification OTP"}
                     <ArrowRight className="w-4 h-4" />
@@ -255,7 +255,7 @@ export default function LoginPage() {
                           setOtpSent(false);
                           setOtp("");
                         }}
-                        className="text-[11px] text-[#A94D37] hover:underline"
+                        className="text-[11px] text-[#DC2626] hover:underline"
                       >
                         Change Email
                       </button>
@@ -269,7 +269,7 @@ export default function LoginPage() {
                         value={otp}
                         onChange={(e) => setOtp(e.target.value)}
                         placeholder="6-digit code"
-                        className="w-full pl-9 pr-3 py-2 text-center text-lg font-mono tracking-widest border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                        className="w-full pl-9 pr-3 py-2 text-center text-lg font-mono tracking-widest border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                       />
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1">
@@ -291,7 +291,7 @@ export default function LoginPage() {
                       type="button"
                       onClick={handleSendOtp}
                       disabled={otpLoading}
-                      className="text-xs text-gray-500 hover:text-[#A94D37] underline"
+                      className="text-xs text-gray-500 hover:text-[#DC2626] underline"
                     >
                       {otpLoading ? "Resending..." : "Didn't receive code? Resend OTP"}
                     </button>
@@ -303,7 +303,7 @@ export default function LoginPage() {
 
           <p className="text-center text-xs text-gray-600 mt-6">
             Don&apos;t have an account yet?{" "}
-            <Link href="/signup" className="text-[#A94D37] font-semibold hover:underline">
+            <Link href="/signup" className="text-[#DC2626] font-semibold hover:underline">
               Create an Account
             </Link>
           </p>

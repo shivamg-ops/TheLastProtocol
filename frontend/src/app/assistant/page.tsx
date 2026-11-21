@@ -138,7 +138,7 @@ export default function AssistantPage() {
         {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-200">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#A94D37] to-[#8e3e2b] flex items-center justify-center text-white shadow-md">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#DC2626] to-[#B91C1C] flex items-center justify-center text-white shadow-md">
               <Bot className="w-5 h-5" />
             </div>
             <div>
@@ -158,7 +158,7 @@ export default function AssistantPage() {
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-[#A94D37]"
+              className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-[#DC2626]"
             >
               <option value="auto">Auto Language</option>
               <option value="en">English</option>
@@ -182,7 +182,7 @@ export default function AssistantPage() {
             <button
               key={idx}
               onClick={() => handleSendMessage(q)}
-              className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white hover:bg-amber-50 text-gray-700 hover:text-[#A94D37] border border-gray-200 hover:border-amber-300 transition shadow-sm text-left"
+              className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white hover:bg-amber-50 text-gray-700 hover:text-[#DC2626] border border-gray-200 hover:border-amber-300 transition shadow-sm text-left"
             >
               {q}
             </button>
@@ -197,7 +197,7 @@ export default function AssistantPage() {
               className={`flex gap-3 ${m.sender === "user" ? "justify-end" : "justify-start"}`}
             >
               {m.sender === "assistant" && (
-                <div className="w-8 h-8 rounded-lg bg-amber-100 text-[#A94D37] flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-[#DC2626] flex items-center justify-center shrink-0 mt-0.5">
                   <Bot className="w-4 h-4" />
                 </div>
               )}
@@ -215,7 +215,7 @@ export default function AssistantPage() {
                 {m.related_complaint && (
                   <div className="mt-2.5 p-3 bg-white rounded-xl border border-amber-200 shadow-sm text-[11px] space-y-1.5 text-gray-800">
                     <div className="flex items-center justify-between pb-1 border-b border-gray-100">
-                      <span className="font-mono font-bold text-[#A94D37]">
+                      <span className="font-mono font-bold text-[#DC2626]">
                         {m.related_complaint.tracking_id}
                       </span>
                       <span className="px-2 py-0.5 rounded font-bold uppercase text-[9px] bg-gray-100 text-gray-700">
@@ -234,7 +234,7 @@ export default function AssistantPage() {
                     <div className="pt-1.5 flex justify-end">
                       <Link
                         href="/citizen"
-                        className="text-[10px] text-[#A94D37] hover:underline font-bold flex items-center gap-1"
+                        className="text-[10px] text-[#DC2626] hover:underline font-bold flex items-center gap-1"
                       >
                         Inspect in Citizen Portal <ArrowRight className="w-3 h-3" />
                       </Link>
@@ -251,7 +251,7 @@ export default function AssistantPage() {
                           <Link
                             key={i}
                             href="/report"
-                            className="px-2.5 py-1 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-[10px] font-semibold rounded-lg shadow-sm transition inline-flex items-center gap-1"
+                            className="px-2.5 py-1 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-[10px] font-semibold rounded-lg shadow-sm transition inline-flex items-center gap-1"
                           >
                             <FileText className="w-3 h-3" /> File Grievance Now
                           </Link>
@@ -307,13 +307,13 @@ export default function AssistantPage() {
 
           {loading && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 rounded-lg bg-amber-100 text-[#A94D37] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 text-[#DC2626] flex items-center justify-center shrink-0">
                 <Bot className="w-4 h-4 animate-pulse" />
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-2xl rounded-tl-none p-3.5 text-xs text-gray-500 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#A94D37] animate-bounce"></span>
-                <span className="w-2 h-2 rounded-full bg-[#A94D37] animate-bounce [animation-delay:0.2s]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#A94D37] animate-bounce [animation-delay:0.4s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-bounce"></span>
+                <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-bounce [animation-delay:0.2s]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-bounce [animation-delay:0.4s]"></span>
                 <span className="text-[11px] ml-1">Consulting civic knowledge base...</span>
               </div>
             </div>
@@ -335,13 +335,13 @@ export default function AssistantPage() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Type your question in English, हिंदी, or Hinglish (e.g. 'Status of JSH-12345678' or 'Kaise report kare?')..."
-            className="flex-1 px-4 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-[#A94D37] text-gray-800 shadow-sm"
+            className="flex-1 px-4 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-[#DC2626] text-gray-800 shadow-sm"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !inputValue.trim()}
-            className="px-4 py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-1.5 shrink-0"
+            className="px-4 py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-1.5 shrink-0"
           >
             <Send className="w-3.5 h-3.5" /> Send
           </button>

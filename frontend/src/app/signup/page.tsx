@@ -130,7 +130,7 @@ export default function SignupPage() {
                   required
                   value={formData.first_name}
                   onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                 />
               </div>
               <div>
@@ -139,7 +139,7 @@ export default function SignupPage() {
                   type="text"
                   value={formData.last_name}
                   onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                 />
               </div>
             </div>
@@ -151,7 +151,7 @@ export default function SignupPage() {
                 required
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
               />
             </div>
 
@@ -171,7 +171,7 @@ export default function SignupPage() {
                     setIsOtpSent(false);
                     setIsEmailVerified(false);
                   }}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] disabled:bg-gray-100"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] disabled:bg-gray-100"
                   placeholder="e.g. citizen@gmail.com"
                 />
                 {!isEmailVerified && (
@@ -179,7 +179,7 @@ export default function SignupPage() {
                     type="button"
                     onClick={handleSendSignupOtp}
                     disabled={otpLoading || !formData.email}
-                    className="px-3.5 py-2 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0"
+                    className="px-3.5 py-2 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0"
                   >
                     {otpLoading ? "Sending..." : isOtpSent ? "Resend OTP" : "Verify Email"}
                   </button>
@@ -200,7 +200,7 @@ export default function SignupPage() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     placeholder="6-digit code"
-                    className="w-36 px-3 py-2 text-center text-sm font-mono tracking-widest border border-amber-300 rounded-lg bg-white focus:outline-none focus:border-[#A94D37]"
+                    className="w-36 px-3 py-2 text-center text-sm font-mono tracking-widest border border-amber-300 rounded-lg bg-white focus:outline-none focus:border-[#DC2626]"
                   />
                   <button
                     type="button"
@@ -221,7 +221,7 @@ export default function SignupPage() {
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
               />
             </div>
 
@@ -231,7 +231,7 @@ export default function SignupPage() {
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                 >
                   <option value="citizen">Individual Citizen</option>
                   <option value="ngo">NGO</option>
@@ -245,7 +245,7 @@ export default function SignupPage() {
                 <select
                   value={formData.preferred_language}
                   onChange={(e) => setFormData({ ...formData, preferred_language: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                 >
                   <option value="en">English</option>
                   <option value="hi">हिंदी (Hindi)</option>
@@ -258,7 +258,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading || !isEmailVerified}
-              className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
+              className="w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-medium text-sm rounded-lg transition shadow flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
             >
               {loading ? "Creating..." : "Sign Up"} <ArrowRight className="w-4 h-4" />
             </button>
@@ -266,7 +266,7 @@ export default function SignupPage() {
 
           <p className="text-center text-xs text-gray-600 mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-[#A94D37] font-semibold hover:underline">
+            <Link href="/login" className="text-[#DC2626] font-semibold hover:underline">
               Sign In
             </Link>
           </p>

@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="w-full px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded bg-[#A94D37] flex items-center justify-center font-bold text-white text-xs">
+            <div className="w-7 h-7 rounded bg-[#DC2626] flex items-center justify-center font-bold text-white text-xs">
               JS
             </div>
             <span className="font-bold text-white tracking-wide">JANSAHAYAK AI</span>

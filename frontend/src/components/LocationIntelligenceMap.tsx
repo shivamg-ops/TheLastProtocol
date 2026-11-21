@@ -103,8 +103,8 @@ export default function LocationIntelligenceMap({
 
         // Semi-transparent buffer circle indicating cluster radius
         const circle = L.circle([hs.approximate_latitude, hs.approximate_longitude], {
-          color: "#A94D37",
-          fillColor: "#A94D37",
+          color: "#DC2626",
+          fillColor: "#DC2626",
           fillOpacity: 0.18,
           radius: hs.radius_meters || 500,
           weight: 1.5,
@@ -115,7 +115,7 @@ export default function LocationIntelligenceMap({
         const hotspotIcon = L.divIcon({
           className: "custom-hotspot-marker",
           html: `
-            <div style="background-color: #A94D37; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; border: 2.5px solid white; box-shadow: 0 4px 10px rgba(169, 77, 55, 0.45); cursor: pointer;">
+            <div style="background-color: #DC2626; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; border: 2.5px solid white; box-shadow: 0 4px 10px rgba(169, 77, 55, 0.45); cursor: pointer;">
               ${hs.complaint_count}
             </div>
           `,
@@ -129,7 +129,7 @@ export default function LocationIntelligenceMap({
 
         centerMarker.bindPopup(`
           <div style="font-family: inherit; font-size: 12px; line-height: 1.4;">
-            <div style="font-weight: 700; color: #A94D37; margin-bottom: 2px;">
+            <div style="font-weight: 700; color: #DC2626; margin-bottom: 2px;">
               🔥 Hotspot Cluster (${hs.hotspot_id})
             </div>
             <div style="font-size: 11px; color: #555; margin-bottom: 4px;">
@@ -224,7 +224,7 @@ export default function LocationIntelligenceMap({
           onClick={() => setShowHotspots(!showHotspots)}
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
             showHotspots
-              ? "bg-[#A94D37] text-white shadow-xs"
+              ? "bg-[#DC2626] text-white shadow-xs"
               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
           }`}
         >
@@ -246,7 +246,7 @@ export default function LocationIntelligenceMap({
       {/* Legend Overlay */}
       <div className="absolute bottom-3 left-3 z-10 bg-white/95 backdrop-blur-sm border border-gray-200/90 rounded-xl shadow-md px-3 py-2 text-[11px] text-gray-600 flex items-center gap-4">
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-[#A94D37] inline-block border border-white shadow-xs"></span>
+          <span className="w-3 h-3 rounded-full bg-[#DC2626] inline-block border border-white shadow-xs"></span>
           <span>Hotspot Center</span>
         </div>
         <div className="flex items-center gap-1.5">

@@ -396,7 +396,7 @@ export default function InteractiveChatReportPage() {
         {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#A94D37]/10 text-xs font-bold text-[#A94D37] uppercase">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#DC2626]/10 text-xs font-bold text-[#DC2626] uppercase">
               <Sparkles className="w-3.5 h-3.5" /> AI Multilingual Civic Assistant
             </div>
             <h1 className="text-2xl font-bold text-[#17191D] mt-1">Interactive Voice & Chat Assistant</h1>
@@ -427,7 +427,7 @@ export default function InteractiveChatReportPage() {
             </div>
             <h2 className="text-2xl font-bold text-[#17191D]">Ticket Successfully Created!</h2>
             <p className="text-gray-600 text-sm mt-2">Your municipal tracking ticket ID is:</p>
-            <div className="my-4 inline-block bg-gray-100 border border-gray-300 px-6 py-2.5 rounded-lg text-lg font-mono font-bold text-[#A94D37]">
+            <div className="my-4 inline-block bg-gray-100 border border-gray-300 px-6 py-2.5 rounded-lg text-lg font-mono font-bold text-[#DC2626]">
               {successTicket}
             </div>
 
@@ -456,7 +456,7 @@ export default function InteractiveChatReportPage() {
               </button>
               <button
                 onClick={() => router.push("/citizen")}
-                className="px-5 py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-xs font-medium rounded-lg shadow"
+                className="px-5 py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-medium rounded-lg shadow"
               >
                 Go to Citizen Dashboard
               </button>
@@ -469,7 +469,7 @@ export default function InteractiveChatReportPage() {
               {/* Chat Status Header */}
               <div className="p-3.5 px-5 bg-[#17191D] text-white flex items-center justify-between border-b border-gray-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#A94D37] flex items-center justify-center font-bold text-white text-xs">
+                  <div className="w-8 h-8 rounded-lg bg-[#DC2626] flex items-center justify-center font-bold text-white text-xs">
                     JS
                   </div>
                   <div>
@@ -481,7 +481,7 @@ export default function InteractiveChatReportPage() {
                 </div>
 
                 {currentDiagnosis?.detected_language && (
-                  <span className="text-[10px] bg-gray-800 border border-gray-700 px-2 py-0.5 rounded text-[#A94D37] font-bold uppercase">
+                  <span className="text-[10px] bg-gray-800 border border-gray-700 px-2 py-0.5 rounded text-[#DC2626] font-bold uppercase">
                     Lang: {currentDiagnosis.detected_language}
                   </span>
                 )}
@@ -498,7 +498,7 @@ export default function InteractiveChatReportPage() {
                   >
                     <div
                       className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 ${
-                        m.sender === "user" ? "bg-[#17191D] text-white" : "bg-[#A94D37] text-white"
+                        m.sender === "user" ? "bg-[#17191D] text-white" : "bg-[#DC2626] text-white"
                       }`}
                     >
                       {m.sender === "user" ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
@@ -526,11 +526,11 @@ export default function InteractiveChatReportPage() {
 
                 {analyzing && (
                   <div className="flex gap-2.5 mr-auto max-w-[80%] items-center">
-                    <div className="w-7 h-7 rounded-full bg-[#A94D37] text-white flex items-center justify-center text-xs">
+                    <div className="w-7 h-7 rounded-full bg-[#DC2626] text-white flex items-center justify-center text-xs">
                       <Bot className="w-3.5 h-3.5" />
                     </div>
                     <div className="p-3 bg-white border border-gray-200 rounded-2xl rounded-tl-none text-xs text-gray-500 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#A94D37] animate-ping"></span>
+                      <span className="w-2 h-2 rounded-full bg-[#DC2626] animate-ping"></span>
                       AI is analyzing grievance & extracting location...
                     </div>
                   </div>
@@ -587,7 +587,7 @@ export default function InteractiveChatReportPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-gray-500 hover:text-[#A94D37] hover:bg-gray-100 rounded-lg transition"
+                  className="p-2 text-gray-500 hover:text-[#DC2626] hover:bg-gray-100 rounded-lg transition"
                   title="Upload Photo / Video Evidence"
                 >
                   <Camera className="w-5 h-5" />
@@ -597,7 +597,7 @@ export default function InteractiveChatReportPage() {
                 <select
                   value={selectedLanguage}
                   onChange={(e) => setSelectedLanguage(e.target.value)}
-                  className="px-1.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:border-[#A94D37]"
+                  className="px-1.5 py-1 text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:border-[#DC2626]"
                   title="Select voice recognition language"
                 >
                   <option value="hi-IN">हिन्दी / Hinglish</option>
@@ -611,7 +611,7 @@ export default function InteractiveChatReportPage() {
                   className={`p-2.5 rounded-xl transition ${
                     isListening
                       ? "bg-red-500 text-white shadow-lg animate-pulse"
-                      : "text-gray-600 hover:text-[#A94D37] hover:bg-gray-100"
+                      : "text-gray-600 hover:text-[#DC2626] hover:bg-gray-100"
                   }`}
                   title={isListening ? "Stop Recording" : `Record Speech (${selectedLanguage})`}
                 >
@@ -627,13 +627,13 @@ export default function InteractiveChatReportPage() {
                       ? "Listening to voice input... speak clearly..."
                       : "Type problem or speak via mic (e.g. 'Hamare gali me kachra pada hai')..."
                   }
-                  className="flex-1 px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#A94D37] focus:bg-white"
+                  className="flex-1 px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#DC2626] focus:bg-white"
                 />
 
                 <button
                   type="submit"
                   disabled={analyzing || (!inputText.trim() && !selectedImage)}
-                  className="p-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white rounded-xl shadow transition disabled:opacity-50"
+                  className="p-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-xl shadow transition disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -646,7 +646,7 @@ export default function InteractiveChatReportPage() {
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                   <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                     <h3 className="text-sm font-bold text-[#17191D] flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-[#A94D37]" /> Structured Complaint Preview
+                      <Sparkles className="w-4 h-4 text-[#DC2626]" /> Structured Complaint Preview
                     </h3>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
@@ -691,7 +691,7 @@ export default function InteractiveChatReportPage() {
                         required
                         value={draftTitle}
                         onChange={(e) => setDraftTitle(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                       />
                     </div>
 
@@ -702,7 +702,7 @@ export default function InteractiveChatReportPage() {
                         required
                         value={draftDescription}
                         onChange={(e) => setDraftDescription(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                       />
                     </div>
 
@@ -712,7 +712,7 @@ export default function InteractiveChatReportPage() {
                         <select
                           value={draftCategory}
                           onChange={(e) => setDraftCategory(e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                         >
                           {categories.map((c) => (
                             <option key={c.id} value={c.id}>
@@ -727,7 +727,7 @@ export default function InteractiveChatReportPage() {
                         <select
                           value={draftPriority}
                           onChange={(e) => setDraftPriority(e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                         >
                           <option value="low">Low</option>
                           <option value="medium">Medium</option>
@@ -747,7 +747,7 @@ export default function InteractiveChatReportPage() {
                         placeholder="e.g. Near Shiv Mandir, Main Road"
                         value={draftAddress}
                         onChange={(e) => setDraftAddress(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                       />
                     </div>
 
@@ -759,7 +759,7 @@ export default function InteractiveChatReportPage() {
                           placeholder="e.g. Ward 12"
                           value={draftWard}
                           onChange={(e) => setDraftWard(e.target.value)}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                         />
                       </div>
                       <div>
@@ -769,7 +769,7 @@ export default function InteractiveChatReportPage() {
                           placeholder="e.g. 3 days"
                           value={draftDuration}
                           onChange={(e) => setDraftDuration(e.target.value)}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626]"
                         />
                       </div>
                     </div>
@@ -803,7 +803,7 @@ export default function InteractiveChatReportPage() {
                           type="checkbox"
                           checked={confirmedByCitizen}
                           onChange={(e) => setConfirmedByCitizen(e.target.checked)}
-                          className="mt-0.5 rounded border-gray-300 text-[#A94D37] focus:ring-[#A94D37]"
+                          className="mt-0.5 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
                         />
                         <span className="text-[11px] text-gray-700 leading-tight">
                           I have verified that the problem description and location are accurate, and I confirm the submission of this complaint.
@@ -814,7 +814,7 @@ export default function InteractiveChatReportPage() {
                     <button
                       type="submit"
                       disabled={submitting || !confirmedByCitizen}
-                      className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 mt-2"
+                      className="w-full py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 mt-2"
                     >
                       {submitting ? "Submitting Ticket & Uploading Evidence..." : "Confirm & Submit Complaint"} <ArrowRight className="w-3.5 h-3.5" />
                     </button>

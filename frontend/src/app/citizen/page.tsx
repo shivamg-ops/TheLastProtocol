@@ -108,7 +108,7 @@ export default function CitizenDashboard() {
           </div>
           <Link
             href="/report"
-            className="px-4 py-2 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5"
+            className="px-4 py-2 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" /> File New Complaint
           </Link>
@@ -157,7 +157,7 @@ export default function CitizenDashboard() {
                 <p className="text-xs text-gray-400 mt-1">Report road, garbage, water or streetlight issues using AI.</p>
                 <Link
                   href="/report"
-                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#A94D37] text-white text-xs font-semibold rounded-lg"
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#DC2626] text-white text-xs font-semibold rounded-lg"
                 >
                   <Plus className="w-4 h-4" /> Report Problem
                 </Link>
@@ -178,7 +178,7 @@ export default function CitizenDashboard() {
                   <tbody className="divide-y divide-gray-100">
                     {complaints.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50 transition">
-                        <td className="py-3 px-4 font-mono font-bold text-[#A94D37]">
+                        <td className="py-3 px-4 font-mono font-bold text-[#DC2626]">
                           {item.tracking_id}
                         </td>
                         <td className="py-3 px-4">
@@ -220,7 +220,7 @@ export default function CitizenDashboard() {
               <div className="mt-4 space-y-4 text-xs">
                 <div>
                   <span className="text-gray-400">Tracking Code:</span>
-                  <div className="font-mono font-bold text-sm text-[#A94D37]">
+                  <div className="font-mono font-bold text-sm text-[#DC2626]">
                     {selectedComplaint.tracking_id}
                   </div>
                 </div>
@@ -256,7 +256,7 @@ export default function CitizenDashboard() {
                 <div className="pt-3 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-bold text-gray-700 flex items-center gap-1.5">
-                      <ArrowRightLeft className="w-3.5 h-3.5 text-[#A94D37]" /> Resolution Verification Evidence
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-[#DC2626]" /> Resolution Verification Evidence
                     </h4>
                     <span className="text-[10px] text-gray-400 font-mono">Before vs After Comparison</span>
                   </div>
@@ -462,7 +462,7 @@ export default function CitizenDashboard() {
                               placeholder="Was the issue resolved satisfactorily? e.g. 'Pothole filled and road leveled nicely.'"
                               value={feedbackNotes}
                               onChange={(e) => setFeedbackNotes(e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white"
+                              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white"
                             />
                           </div>
                         )}
@@ -500,7 +500,7 @@ export default function CitizenDashboard() {
                     {selectedComplaint.timeline && selectedComplaint.timeline.length > 0 ? (
                       selectedComplaint.timeline.map((tl: any, i: number) => (
                         <div key={i} className="flex gap-2.5 items-start">
-                          <div className="w-2 h-2 rounded-full bg-[#A94D37] mt-1 shrink-0"></div>
+                          <div className="w-2 h-2 rounded-full bg-[#DC2626] mt-1 shrink-0"></div>
                           <div>
                             <p className="font-semibold text-gray-900">{tl.action}</p>
                             <p className="text-[11px] text-gray-500">{tl.details}</p>

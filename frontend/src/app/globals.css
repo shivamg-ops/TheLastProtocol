@@ -4,8 +4,8 @@
   --background: #F7F7F5;
   --foreground: #17191D;
   --charcoal: #17191D;
-  --copper: #A94D37;
-  --copper-hover: #8e3e2b;
+  --copper: #DC2626;
+  --copper-hover: #B91C1C;
   --success-green: #25845B;
   --card-bg: #FFFFFF;
   --border: #E5E7EB;
@@ -50,15 +50,15 @@ body {
 }
 
 .bg-copper {
-  background-color: #A94D37;
+  background-color: #DC2626;
 }
 
 .text-copper {
-  color: #A94D37;
+  color: #DC2626;
 }
 
 .border-copper {
-  border-color: #A94D37;
+  border-color: #DC2626;
 }
 
 .bg-success {

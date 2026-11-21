@@ -10,13 +10,13 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="bg-[#17191D] text-white py-20 px-4 sm:px-6 lg:px-8 border-b border-gray-800 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#A94D37_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#DC2626_1px,transparent_1px)] [background-size:16px_16px]"></div>
         <div className="max-w-5xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold uppercase tracking-wider text-gray-300 mb-6">
-            <Sparkles className="w-4 h-4 text-[#A94D37]" /> Multilingual AI Platform
+            <Sparkles className="w-4 h-4 text-[#DC2626]" /> Multilingual AI Platform
           </div>
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight mb-6">
-            From Voice to <span className="text-[#A94D37]">Resolution.</span>
+            From Voice to <span className="text-[#DC2626]">Resolution.</span>
           </h1>
           <p className="text-lg sm:text-xl text-gray-300 max-w-3xl mx-auto mb-10 leading-relaxed font-normal">
             JanSahayak AI turns citizen voice, photos and messages in Hindi, Marathi, Hinglish, and English into verified municipal tickets, auto-assigns departments, and provides verifiable resolution proof.
@@ -25,7 +25,7 @@ export default function Home() {
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link
               href="/report"
-              className="px-6 py-3.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium rounded-xl shadow-lg flex items-center gap-2 transition"
+              className="px-6 py-3.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-medium rounded-xl shadow-lg flex items-center gap-2 transition"
             >
               <Mic className="w-5 h-5" /> Report Issue via Voice / AI <ArrowRight className="w-4 h-4" />
             </Link>
@@ -44,7 +44,7 @@ export default function Home() {
               <div className="text-xs text-gray-400">EN, HI, MR, Hinglish</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-[#A94D37]">6 Categories</div>
+              <div className="text-2xl font-bold text-[#DC2626]">6 Categories</div>
               <div className="text-xs text-gray-400">Garbage, Water, Potholes & more</div>
             </div>
             <div>
@@ -75,8 +75,8 @@ export default function Home() {
             { title: "Drainage and Sewage", dept: "Stormwater & Drainage", desc: "Clogged stormwater drains, sewage overflow during rains, open manholes." },
             { title: "Traffic & Road Obstruction", dept: "Traffic & Encroachment", desc: "Unauthorized roadside parking, illegal vendor encroachment on pedestrian pathways." },
           ].map((cat, idx) => (
-            <div key={idx} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:border-[#A94D37] transition">
-              <span className="text-xs font-semibold text-[#A94D37] uppercase tracking-wider">{cat.dept}</span>
+            <div key={idx} className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:border-[#DC2626] transition">
+              <span className="text-xs font-semibold text-[#DC2626] uppercase tracking-wider">{cat.dept}</span>
               <h3 className="text-lg font-bold text-[#17191D] mt-1 mb-2">{cat.title}</h3>
               <p className="text-sm text-gray-600 leading-relaxed">{cat.desc}</p>
             </div>
@@ -94,7 +94,7 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="p-5 rounded-xl bg-[#F7F7F5] border border-gray-200">
-              <div className="w-10 h-10 rounded-lg bg-[#A94D37] text-white flex items-center justify-center font-bold mb-4">1</div>
+              <div className="w-10 h-10 rounded-lg bg-[#DC2626] text-white flex items-center justify-center font-bold mb-4">1</div>
               <h4 className="font-bold text-[#17191D] mb-1">Citizen Input</h4>
               <p className="text-xs text-gray-600">Speaks or types in native language (Hindi, Marathi, English) with photo/video.</p>
             </div>
@@ -104,7 +104,7 @@ export default function Home() {
               <p className="text-xs text-gray-600">Extracts category, ward, priority, asks for missing landmark, detects duplicate reports.</p>
             </div>
             <div className="p-5 rounded-xl bg-[#F7F7F5] border border-gray-200">
-              <div className="w-10 h-10 rounded-lg bg-[#A94D37] text-white flex items-center justify-center font-bold mb-4">3</div>
+              <div className="w-10 h-10 rounded-lg bg-[#DC2626] text-white flex items-center justify-center font-bold mb-4">3</div>
               <h4 className="font-bold text-[#17191D] mb-1">Admin & Staff Dispatch</h4>
               <p className="text-xs text-gray-600">Municipal department assigns local field staff with SLA countdown timer.</p>
             </div>

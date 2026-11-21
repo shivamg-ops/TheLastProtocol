@@ -46,7 +46,7 @@ const LocationIntelligenceMap = dynamic(
   { ssr: false, loading: () => <div className="h-[500px] flex items-center justify-center bg-gray-100 rounded-2xl text-xs text-gray-400">Loading interactive geospatial intelligence...</div> }
 );
 
-const COLORS = ["#A94D37", "#25845B", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280"];
+const COLORS = ["#DC2626", "#25845B", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280"];
 
 export default function AdminPage() {
   const [analytics, setAnalytics] = useState<any>(null);
@@ -268,7 +268,7 @@ export default function AdminPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#A94D37] animate-pulse"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] animate-pulse"></span>
               <h1 className="text-2xl font-bold text-[#17191D]">AI Command & Analytics Dashboard</h1>
             </div>
             <p className="text-xs text-gray-500 mt-1">
@@ -290,12 +290,12 @@ export default function AdminPage() {
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6">
           <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-gray-100">
             <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-[#A94D37]" /> Filter Municipal Data
+              <Filter className="w-3.5 h-3.5 text-[#DC2626]" /> Filter Municipal Data
             </span>
             {(dateFrom || dateTo || selectedDept || selectedCat || selectedStatus) && (
               <button
                 onClick={handleResetFilters}
-                className="text-[11px] text-[#A94D37] hover:underline font-semibold"
+                className="text-[11px] text-[#DC2626] hover:underline font-semibold"
               >
                 Clear all filters
               </button>
@@ -308,7 +308,7 @@ export default function AdminPage() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
               />
             </div>
             <div>
@@ -317,7 +317,7 @@ export default function AdminPage() {
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
               />
             </div>
             <div>
@@ -325,7 +325,7 @@ export default function AdminPage() {
               <select
                 value={selectedDept}
                 onChange={(e) => setSelectedDept(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
               >
                 <option value="">All Departments</option>
                 {departments.map((d) => (
@@ -338,7 +338,7 @@ export default function AdminPage() {
               <select
                 value={selectedCat}
                 onChange={(e) => setSelectedCat(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
               >
                 <option value="">All Categories</option>
                 {categories.map((c) => (
@@ -351,7 +351,7 @@ export default function AdminPage() {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
               >
                 <option value="">All Statuses</option>
                 <option value="submitted">Submitted</option>
@@ -473,7 +473,7 @@ export default function AdminPage() {
           <div className="mb-6 bg-gradient-to-r from-amber-50/70 via-white to-orange-50/50 border border-amber-200/80 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#A94D37] flex items-center justify-center text-white shadow-sm">
+                <div className="w-7 h-7 rounded-lg bg-[#DC2626] flex items-center justify-center text-white shadow-sm">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
@@ -493,7 +493,7 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {analytics.ai_insights.insights.map((ins: any, idx: number) => (
                 <div key={idx} className="bg-white/90 p-3.5 rounded-xl border border-amber-100/90 shadow-sm">
-                  <span className="text-[10px] font-bold uppercase text-[#A94D37] tracking-wider block mb-1">
+                  <span className="text-[10px] font-bold uppercase text-[#DC2626] tracking-wider block mb-1">
                     {ins.title}
                   </span>
                   <p className="text-xs text-gray-600 leading-relaxed">{ins.description}</p>
@@ -509,7 +509,7 @@ export default function AdminPage() {
           <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-[#A94D37]" />
+                <BarChart2 className="w-4 h-4 text-[#DC2626]" />
                 <h3 className="text-sm font-bold text-[#17191D]">Grievance Volume Trend</h3>
               </div>
               <span className="text-[11px] text-gray-400">Daily complaint incoming volume</span>
@@ -525,7 +525,7 @@ export default function AdminPage() {
                       contentStyle={{ backgroundColor: "#17191D", borderRadius: 8, color: "#fff", border: "none", fontSize: 12 }}
                       itemStyle={{ color: "#fff" }}
                     />
-                    <Line type="monotone" dataKey="count" name="Complaints" stroke="#A94D37" strokeWidth={2.5} dot={{ r: 3, fill: "#A94D37" }} />
+                    <Line type="monotone" dataKey="count" name="Complaints" stroke="#DC2626" strokeWidth={2.5} dot={{ r: 3, fill: "#DC2626" }} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -581,7 +581,7 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-100">
             <div>
               <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-[#A94D37]" />
+                <MapPin className="w-4 h-4 text-[#DC2626]" />
                 <h3 className="text-sm font-bold text-[#17191D]">
                   Location Intelligence & Civic Hotspot Mapping
                 </h3>
@@ -642,7 +642,7 @@ export default function AdminPage() {
                 {selectedMapComplaint ? (
                   <div className="space-y-2.5 text-xs">
                     <div className="p-2.5 bg-white rounded-lg border border-gray-200">
-                      <span className="font-mono font-bold text-[#A94D37] text-[11px] block">
+                      <span className="font-mono font-bold text-[#DC2626] text-[11px] block">
                         {selectedMapComplaint.tracking_id}
                       </span>
                       <p className="font-semibold text-gray-900 mt-1">{selectedMapComplaint.title}</p>
@@ -657,7 +657,7 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <strong>Status:</strong>{" "}
-                        <span className="capitalize font-semibold text-[#A94D37]">
+                        <span className="capitalize font-semibold text-[#DC2626]">
                           {selectedMapComplaint.status}
                         </span>
                       </div>
@@ -677,7 +677,7 @@ export default function AdminPage() {
                   <div className="space-y-2.5 text-xs">
                     <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900">
                       <div className="flex items-center gap-1 font-bold text-xs">
-                        <Flame className="w-3.5 h-3.5 text-[#A94D37]" /> Hotspot Cluster {selectedHotspot.hotspot_id}
+                        <Flame className="w-3.5 h-3.5 text-[#DC2626]" /> Hotspot Cluster {selectedHotspot.hotspot_id}
                       </div>
                       <p className="text-[11px] mt-1 text-amber-800">
                         {selectedHotspot.complaint_count} complaints clustered within {selectedHotspot.radius_meters}m radius.
@@ -729,7 +729,7 @@ export default function AdminPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#A94D37] to-[#8e3e2b] flex items-center justify-center text-white shadow-sm">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#DC2626] to-[#B91C1C] flex items-center justify-center text-white shadow-sm">
                 <TrendingUp className="w-4 h-4" />
               </div>
               <div>
@@ -798,10 +798,10 @@ export default function AdminPage() {
                         type="monotone"
                         dataKey="predicted_count"
                         name="Projected Intake (Estimated)"
-                        stroke="#A94D37"
+                        stroke="#DC2626"
                         strokeWidth={2.5}
                         strokeDasharray="4 4"
-                        dot={{ r: 3, fill: "#A94D37" }}
+                        dot={{ r: 3, fill: "#DC2626" }}
                       />
                       <Line
                         type="monotone"
@@ -835,7 +835,7 @@ export default function AdminPage() {
             <div className="bg-[#FBFBFA] p-4 rounded-xl border border-gray-200 flex flex-col">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
                 <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                  <Flame className="w-3.5 h-3.5 text-[#A94D37]" /> Persistent Issue Clusters
+                  <Flame className="w-3.5 h-3.5 text-[#DC2626]" /> Persistent Issue Clusters
                 </span>
                 <span className="text-[10px] text-gray-400 font-mono">
                   {predictiveTrends?.recurring_problems?.length || 0} detected
@@ -884,7 +884,7 @@ export default function AdminPage() {
             <div className="border border-gray-200 rounded-xl p-4 bg-[#FBFBFA]">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
                 <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-[#A94D37]" /> Civic Hotspot Risk Ranking
+                  <ShieldAlert className="w-4 h-4 text-[#DC2626]" /> Civic Hotspot Risk Ranking
                 </span>
                 <span className="text-[10px] text-gray-400 font-mono">
                   Scale: 0-100 Risk Score
@@ -974,7 +974,7 @@ export default function AdminPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-8">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-[#A94D37]" />
+              <Building2 className="w-4 h-4 text-[#DC2626]" />
               <h3 className="text-sm font-bold text-[#17191D]">Department Performance & SLA Resolution</h3>
             </div>
             <span className="text-xs text-gray-400">Departmental resolution efficiency</span>
@@ -1051,7 +1051,7 @@ export default function AdminPage() {
                 {filteredComplaints.length > 0 ? (
                   filteredComplaints.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition">
-                      <td className="py-3 px-4 font-mono font-bold text-[#A94D37]">
+                      <td className="py-3 px-4 font-mono font-bold text-[#DC2626]">
                         {item.tracking_id}
                         {item.ai_duplicate_suspect && (
                           <span className="block text-[10px] text-amber-600 font-sans font-bold">
@@ -1136,7 +1136,7 @@ export default function AdminPage() {
             <div className="bg-white p-6 rounded-2xl max-w-lg w-full shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#A94D37] flex items-center justify-center text-white">
+                  <div className="w-7 h-7 rounded-lg bg-[#DC2626] flex items-center justify-center text-white">
                     <Users className="w-4 h-4" />
                   </div>
                   <div>
@@ -1170,7 +1170,7 @@ export default function AdminPage() {
                 ) : recommendation && recommendation.has_recommendation ? (
                   <div className="p-4 bg-gradient-to-r from-amber-50/80 via-white to-orange-50/60 border border-amber-200 rounded-xl shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#A94D37] flex items-center gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#DC2626] flex items-center gap-1">
                         <Sparkles className="w-3.5 h-3.5" /> AI Recommended Officer
                       </span>
                       <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
@@ -1279,7 +1279,7 @@ export default function AdminPage() {
                     <select
                       value={staffId}
                       onChange={(e) => setStaffId(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white font-medium text-gray-800"
+                      className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white font-medium text-gray-800"
                     >
                       {staffMembers.map((staff) => (
                         <option key={staff.id} value={staff.id}>
@@ -1313,7 +1313,7 @@ export default function AdminPage() {
                   <button
                     type="submit"
                     disabled={assigning || staffMembers.length === 0}
-                    className="px-4 py-2 text-xs font-semibold bg-[#A94D37] text-white rounded-lg shadow hover:bg-[#8e3e2b] disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-4 py-2 text-xs font-semibold bg-[#DC2626] text-white rounded-lg shadow hover:bg-[#B91C1C] disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <CheckCircle className="w-3.5 h-3.5" />
                     {assigning ? "Assigning..." : "Approve & Dispatch Staff"}
@@ -1346,7 +1346,7 @@ export default function AdminPage() {
               <div className="mt-3 text-xs space-y-3">
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-[10px] uppercase font-bold text-gray-400 block">Ticket Information</span>
-                  <div className="font-mono font-bold text-sm text-[#A94D37] mt-0.5">
+                  <div className="font-mono font-bold text-sm text-[#DC2626] mt-0.5">
                     {reviewingDispute.tracking_id}
                   </div>
                   <p className="font-semibold text-gray-800 text-xs mt-1">{reviewingDispute.title}</p>
@@ -1449,7 +1449,7 @@ export default function AdminPage() {
                       value={reviewNotes}
                       onChange={(e) => setReviewNotes(e.target.value)}
                       placeholder="Add remarks explaining review rationale..."
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white text-gray-800"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] bg-white text-gray-800"
                     />
                   </div>
 
@@ -1464,7 +1464,7 @@ export default function AdminPage() {
                     <button
                       type="submit"
                       disabled={reviewSubmitting}
-                      className="px-4 py-1.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white text-xs font-semibold rounded-lg shadow transition"
+                      className="px-4 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-semibold rounded-lg shadow transition"
                     >
                       {reviewSubmitting ? "Processing..." : "Submit Review Decision"}
                     </button>
