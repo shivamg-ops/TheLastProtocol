@@ -286,8 +286,13 @@ export default function CitizenDashboard() {
                               <span className="text-[10px] text-gray-400">Original evidence photo unavailable</span>
                             </div>
                           )}
-                          <div className="p-1.5 text-[10px] text-gray-500 bg-white border-t border-gray-100">
-                            {beforeEvidence ? `Uploaded by ${beforeEvidence.uploaded_by_name || "Citizen"}` : "No initial photo filed"}
+                          <div className="p-1.5 text-[10px] text-gray-500 bg-white border-t border-gray-100 flex flex-col gap-0.5">
+                            <span className="font-medium text-gray-700">{beforeEvidence ? `Uploaded by ${beforeEvidence.uploaded_by_name || "Citizen"}` : "No initial photo filed"}</span>
+                            {beforeEvidence?.ai_analysis_description && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 mt-0.5 inline-block font-semibold">
+                                🤖 AI Authenticity Verified: {beforeEvidence.ai_analysis_description.includes("Trust score") ? beforeEvidence.ai_analysis_description.split(".")[0] : "Verified Authentic"}
+                              </span>
+                            )}
                           </div>
                         </div>
 
