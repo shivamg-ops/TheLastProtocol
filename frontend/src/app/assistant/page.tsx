@@ -134,7 +134,7 @@ export default function AssistantPage() {
     <div className="flex flex-col min-h-screen bg-[#FAFAF9]">
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-4 py-6 w-full flex-1 flex flex-col">
+      <main className="w-full max-w-6xl mx-auto px-3 sm:px-5 lg:px-6 py-6 flex-1 flex flex-col">
         {/* Header Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-200">
           <div className="flex items-center gap-2.5">

@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function Footer() {
   return (
     <footer className="bg-[#17191D] text-gray-400 text-sm border-t border-gray-800 py-10 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded bg-[#A94D37] flex items-center justify-center font-bold text-white text-xs">
@@ -47,7 +47,7 @@ export default function Footer() {
           </p>
         </div>
       </div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-gray-800 text-xs text-center text-gray-500">
+      <div className="w-full px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-gray-800 text-xs text-center text-gray-500">
         &copy; 2026 JANSAHAYAK AI — From Voice to Resolution. All rights reserved.
       </div>
     </footer>
