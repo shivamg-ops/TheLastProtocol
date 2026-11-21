@@ -57,43 +57,50 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Clean Public Navigation Links (Standard SaaS) */}
-          <div className="hidden md:flex items-center space-x-8 text-xs font-semibold tracking-wide">
-            <Link
-              href="/"
-              className={`transition hover:text-white ${
-                pathname === "/" ? "text-[#DC2626]" : "text-gray-300"
-              }`}
-            >
-              Overview
-            </Link>
-
-            <Link
-              href="/#categories"
-              className="text-gray-300 hover:text-white transition"
-            >
-              Civic Verticals
-            </Link>
-
-            <Link
-              href="/#workflow"
-              className="text-gray-300 hover:text-white transition"
-            >
-              How It Works
-            </Link>
-
-            <Link
-              href="/assistant"
-              className={`transition hover:text-white flex items-center gap-1 ${
-                pathname === "/assistant" ? "text-[#DC2626] font-bold" : "text-gray-300"
-              }`}
-            >
-              <Bot className="w-3.5 h-3.5 text-[#DC2626]" /> AI Assistant
-            </Link>
-
-            {/* Role-Protected Navigation Links: Staff & Admin Only */}
-            {user && (user.role === "admin" || user.role === "staff") && (
+          {/* Navigation Links based on User Role */}
+          <div className="hidden md:flex items-center space-x-6 text-xs font-semibold tracking-wide">
+            {/* If user is staff, show strictly focused task management navigation */}
+            {user && user.role === "staff" ? (
               <>
+                <Link
+                  href="/staff"
+                  className={`flex items-center gap-1.5 transition hover:text-white ${
+                    pathname === "/staff" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 text-[#DC2626]" /> My Assigned Tasks
+                </Link>
+
+                <Link
+                  href="/roster"
+                  className={`transition hover:text-white flex items-center gap-1 ${
+                    pathname === "/roster" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-[#DC2626]" /> Staff Roster
+                </Link>
+
+                <Link
+                  href="/hotspots"
+                  className={`transition hover:text-white flex items-center gap-1 ${
+                    pathname === "/hotspots" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5 text-[#DC2626]" /> Hotspot Map
+                </Link>
+              </>
+            ) : user && user.role === "admin" ? (
+              /* Admin Navigation */
+              <>
+                <Link
+                  href="/admin"
+                  className={`flex items-center gap-1.5 transition hover:text-white ${
+                    pathname === "/admin" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 text-[#DC2626]" /> Admin Console
+                </Link>
+
                 <Link
                   href="/hotspots"
                   className={`transition hover:text-white flex items-center gap-1 ${
@@ -112,20 +119,38 @@ export default function Navbar() {
                   <Users className="w-3.5 h-3.5 text-[#DC2626]" /> Staff Roster
                 </Link>
               </>
-            )}
+            ) : (
+              /* Public / Citizen Navigation */
+              <>
+                <Link
+                  href="/"
+                  className={`transition hover:text-white ${
+                    pathname === "/" ? "text-[#DC2626]" : "text-gray-300"
+                  }`}
+                >
+                  Overview
+                </Link>
 
-            {/* If user is logged in, show their personal Dashboard link */}
-            {user && (
-              <Link
-                href={getDashboardPath(user.role)}
-                className={`flex items-center gap-1.5 transition hover:text-white ${
-                  pathname.startsWith(getDashboardPath(user.role))
-                    ? "text-[#DC2626]"
-                    : "text-gray-300"
-                }`}
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 text-[#DC2626]" /> Dashboard
-              </Link>
+                <Link
+                  href="/assistant"
+                  className={`transition hover:text-white flex items-center gap-1 ${
+                    pathname === "/assistant" ? "text-[#DC2626] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5 text-[#DC2626]" /> AI Assistant
+                </Link>
+
+                {user && (
+                  <Link
+                    href="/citizen"
+                    className={`flex items-center gap-1.5 transition hover:text-white ${
+                      pathname === "/citizen" ? "text-[#DC2626]" : "text-gray-300"
+                    }`}
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5 text-[#DC2626]" /> My Complaints
+                  </Link>
+                )}
+              </>
             )}
           </div>
 
