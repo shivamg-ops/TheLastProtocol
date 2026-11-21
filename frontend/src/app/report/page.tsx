@@ -348,8 +348,11 @@ export default function InteractiveChatReportPage() {
       return;
     }
 
-    // Task 7: Enforce ready_to_submit check before complaint creation
-    if (currentDiagnosis && currentDiagnosis.ready_to_submit === false) {
+    // If user has filled the Exact Location / Landmark field manually (>= 3 chars), treat location as provided
+    const hasValidAddress = Boolean(draftAddress && draftAddress.trim().length >= 3 && draftAddress.toLowerCase() !== "reported location");
+
+    // Task 7: Enforce ready_to_submit check before complaint creation unless citizen has manually provided location in the form
+    if (currentDiagnosis && currentDiagnosis.ready_to_submit === false && !hasValidAddress) {
       const clarifyText = currentDiagnosis.clarification_question ||
         (currentDiagnosis.missing_information && currentDiagnosis.missing_information.length > 0
           ? `Please provide: ${currentDiagnosis.missing_information.join(", ")}`
@@ -358,7 +361,7 @@ export default function InteractiveChatReportPage() {
       return;
     }
 
-    if (!draftAddress || draftAddress.trim().length < 3 || draftAddress.toLowerCase() === "reported location") {
+    if (!hasValidAddress) {
       alert("Please specify the exact street, landmark, or location before submitting.");
       return;
     }
@@ -692,24 +695,17 @@ export default function InteractiveChatReportPage() {
                     </span>
                   </div>
 
-                    {/* Clarification / Missing Info Alert */}
-                    {currentDiagnosis.ready_to_submit === false && (
+                    {/* Clarification / Missing Info Alert - only shows if location is actually missing */}
+                    {(!draftAddress || draftAddress.trim().length < 3) && currentDiagnosis.ready_to_submit === false && (
                       <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="block font-semibold">Missing Essential Details Before Submission:</strong>
+                          <strong className="block font-semibold">Missing Location Before Submission:</strong>
                           {currentDiagnosis.clarification_question && (
                             <p className="mt-1 text-amber-800 italic">"{currentDiagnosis.clarification_question}"</p>
                           )}
-                          {currentDiagnosis.missing_information && currentDiagnosis.missing_information.length > 0 && (
-                            <ul className="list-disc ml-4 mt-1 space-y-0.5 text-[11px] text-amber-700">
-                              {currentDiagnosis.missing_information.map((item: string, idx: number) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          )}
-                          <p className="mt-2 text-[10px] text-amber-600">
-                            Please type or speak the missing details on the left, or edit the address field directly below.
+                          <p className="mt-1.5 text-[11px] text-amber-700">
+                            Please type or speak your area/landmark in the chat on the left, <strong>or simply type it in the &quot;Exact Location / Landmark&quot; input box below</strong>.
                           </p>
                         </div>
                       </div>
