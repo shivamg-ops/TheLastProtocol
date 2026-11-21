@@ -15,8 +15,30 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scaling micro typography slightly for crisp professional readability */
+.text-xs {
+  font-size: 0.8125rem !important; /* 13px instead of 12px */
+  line-height: 1.25rem !important;
+}
+
+.text-\[10px\] {
+  font-size: 0.75rem !important; /* 12px instead of 10px */
+}
+
+.text-\[9px\] {
+  font-size: 0.6875rem !important; /* 11px instead of 9px */
+}
+
+.text-\[11px\] {
+  font-size: 0.775rem !important; /* 12.4px instead of 11px */
 }
 
 .bg-charcoal {
