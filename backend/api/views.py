@@ -42,12 +42,25 @@ class RegisterView(viewsets.GenericViewSet):
             "user": UserSerializer(user).data
         }, status=status.HTTP_201_CREATED)
 
+class IsAdminOrStaff(permissions.BasePermission):
+    """
+    Permission check granting access to verified Admin or Staff users.
+    """
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and (
+                request.user.role in [UserRole.ADMIN, UserRole.STAFF] or
+                request.user.is_staff or
+                request.user.is_superuser
+            )
+        )
+
 class UserProfileView(viewsets.GenericViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
         if self.action == 'staff_list':
-            return [permissions.IsAdminUser()]
+            return [IsAdminOrStaff()]
         return [permissions.IsAuthenticated()]
 
     @action(detail=False, methods=['get'])
