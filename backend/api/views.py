@@ -31,6 +31,11 @@ class RegisterView(viewsets.GenericViewSet):
 class UserProfileView(viewsets.GenericViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        if self.action == 'staff_list':
+            return [permissions.IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
     @action(detail=False, methods=['get'])
     def me(self, request):
         serializer = UserSerializer(request.user)
@@ -40,6 +45,12 @@ class UserProfileView(viewsets.GenericViewSet):
             "user": serializer.data,
             "subscription": sub_data
         })
+
+    @action(detail=False, methods=['get'])
+    def staff_list(self, request):
+        staff_users = User.objects.filter(Q(role=UserRole.STAFF) | Q(is_staff=True)).exclude(role=UserRole.ADMIN)
+        serializer = UserSerializer(staff_users, many=True)
+        return Response(serializer.data)
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
@@ -160,6 +171,9 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         staff_id = request.data.get('staff_id')
         try:
             staff_user = User.objects.get(id=staff_id)
+            if staff_user.role != UserRole.STAFF and not staff_user.is_staff:
+                return Response({"error": "Selected user is not a field staff member."}, status=status.HTTP_400_BAD_REQUEST)
+
             complaint.assigned_staff = staff_user
             complaint.assigned_at = timezone.now()
             complaint.status = ComplaintStatus.ASSIGNED
@@ -184,6 +198,53 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({"error": "Staff user not found"}, status=404)
 
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def submit_feedback(self, request, pk=None):
+        complaint = self.get_object()
+
+        # Only the citizen who reported the complaint can submit feedback
+        if complaint.citizen != request.user and request.user.role != UserRole.ADMIN:
+            return Response({"error": "Forbidden: Only the reporting citizen can submit feedback for this complaint."}, status=status.HTTP_403_FORBIDDEN)
+
+        if complaint.status != ComplaintStatus.RESOLVED and complaint.status != ComplaintStatus.VERIFIED:
+            return Response({"error": "Feedback can only be submitted for resolved complaints."}, status=status.HTTP_400_BAD_REQUEST)
+
+        rating = request.data.get('rating')
+        feedback_text = request.data.get('feedback_text', '')
+        satisfaction = request.data.get('resolution_satisfaction', True)
+
+        if not rating or not str(rating).isdigit() or int(rating) < 1 or int(rating) > 5:
+            return Response({"error": "A rating between 1 and 5 is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if feedback already exists (prevent duplicate submissions)
+        feedback, created = CitizenFeedback.objects.get_or_create(
+            complaint=complaint,
+            defaults={
+                'rating': int(rating),
+                'feedback_text': feedback_text,
+                'resolution_satisfaction': bool(satisfaction)
+            }
+        )
+
+        if not created:
+            return Response({"error": "Feedback has already been submitted for this complaint."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Mark complaint status as verified by citizen
+        complaint.status = ComplaintStatus.VERIFIED
+        complaint.save(update_fields=['status'])
+
+        # Audit timeline
+        ComplaintTimeline.objects.create(
+            complaint=complaint,
+            performed_by=request.user,
+            action="Resolution Verified & Feedback Submitted",
+            details=f"Citizen rated resolution {rating}/5 stars. Notes: {feedback_text}",
+            from_status=ComplaintStatus.RESOLVED,
+            to_status=ComplaintStatus.VERIFIED
+        )
+
+        return Response(CitizenFeedbackSerializer(feedback).data, status=status.HTTP_201_CREATED)
+
 class AIAnalysisView(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
 
@@ -205,9 +266,23 @@ class AIAnalysisView(viewsets.GenericViewSet):
         return Response(result)
 
 class EvidenceUploadView(viewsets.ModelViewSet):
-    queryset = ComplaintEvidence.objects.all()
     serializer_class = ComplaintEvidenceSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.role == UserRole.ADMIN:
+            return ComplaintEvidence.objects.all().order_by('-created_at')
+        elif user.role == UserRole.STAFF:
+            # Staff can see evidence for complaints assigned to them
+            return ComplaintEvidence.objects.filter(
+                Q(uploaded_by=user) | Q(complaint__assigned_staff=user)
+            ).order_by('-created_at')
+        else:
+            # Citizen can only see evidence for their own complaints or uploaded by them
+            return ComplaintEvidence.objects.filter(
+                Q(uploaded_by=user) | Q(complaint__citizen=user)
+            ).order_by('-created_at')
 
     def perform_create(self, serializer):
         evidence = serializer.save(uploaded_by=self.request.user)

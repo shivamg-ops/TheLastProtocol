@@ -66,33 +66,34 @@ def analyze_complaint_text(user_input: str, conversation_history: list = None, a
     priority = "medium"
     detected_lang = "en"
 
-    # Language detection
-    if any(char in full_text for char in ['क', 'ख', 'ग', 'है', 'में', 'और', 'पानी', 'कचरा', 'सड़क']):
-        detected_lang = "hi"
-    elif any(char in full_text for char in ['आहे', 'नाही', 'रस्ता', 'पाणी', 'कचरा', 'झाले']):
+    # Language detection - check Marathi specific markers first
+    if any(term in full_text for term in ['आहे', 'नाही', 'रस्ता', 'रस्त्यावर', 'पाणी', 'कचरा', 'झाले', 'खड्डा', 'खड्डे', 'पडला', 'होत']):
         detected_lang = "mr"
-    elif any(word in text_lower for word in ['hai', 'nahi', 'karo', 'pani', 'kachra', 'sadak', 'bahut', 'kharab']):
+    elif any(term in full_text for term in ['कचरा', 'सड़क', 'गड्ढा', 'पानी', 'है', 'में', 'और', 'खराब', 'नाला', 'बिजली']):
+        detected_lang = "hi"
+    elif any(word in text_lower for word in ['hai', 'nahi', 'karo', 'pani', 'kachra', 'sadak', 'bahut', 'kharab', 'gaddha', 'gutter']):
         detected_lang = "hinglish"
 
     # Category matching
-    if any(w in text_lower for w in ['water', 'paani', 'pani', 'pipe', 'leakage', 'tap', 'supply', 'जल', 'पाणी']):
+    if any(w in text_lower or w in full_text for w in ['water', 'paani', 'pani', 'pipe', 'leakage', 'tap', 'supply', 'जल', 'पाणी', 'पाइप']):
         category = "Water Supply"
-        if any(w in text_lower for w in ['burst', 'no water for 3 days', 'urgent', 'overflow']):
+        if any(w in text_lower or w in full_text for w in ['burst', 'no water for 3 days', 'urgent', 'overflow', 'फुटली', 'फूट']):
             priority = "high"
-    elif any(w in text_lower for w in ['road', 'pothole', 'sadak', 'gaddha', 'asphalt', 'crater', 'rasta', 'रस्ता', 'गड्डा']):
+    elif any(w in text_lower or w in full_text for w in ['road', 'pothole', 'sadak', 'gaddha', 'asphalt', 'crater', 'rasta', 'रस्ता', 'रस्त्यावर', 'गड्डा', 'खड्डा', 'खड्डे']):
         category = "Roads and Potholes"
-        if any(w in text_lower for w in ['accident', 'deep', 'injury']):
+        if any(w in text_lower or w in full_text for w in ['accident', 'deep', 'injury', 'अपघात', 'मोठा']):
             priority = "urgent"
-    elif any(w in text_lower for w in ['light', 'streetlight', 'dark', 'bulb', 'pole', 'roshni', 'batti', 'लाइट', 'दिवा']):
+    elif any(w in text_lower or w in full_text for w in ['light', 'streetlight', 'dark', 'bulb', 'pole', 'roshni', 'batti', 'लाइट', 'दिवा', 'अंधार']):
         category = "Streetlights"
-    elif any(w in text_lower for w in ['drain', 'sewer', 'sewage', 'gutter', 'drainage', 'naala', 'nala', 'गटर', 'नाली']):
+    elif any(w in text_lower or w in full_text for w in ['drain', 'sewer', 'sewage', 'gutter', 'drainage', 'naala', 'nala', 'गटर', 'नाली', 'ड्रेनेज']):
         category = "Drainage and Sewage"
         priority = "high"
-    elif any(w in text_lower for w in ['traffic', 'jam', 'block', 'parking', 'obstruction', 'encroachment', 'गाड़ी']):
+    elif any(w in text_lower or w in full_text for w in ['traffic', 'jam', 'block', 'parking', 'obstruction', 'encroachment', 'गाड़ी', 'वाहतूक']):
         category = "Traffic and Road Obstruction"
     else:
         category = "Garbage and Sanitation"
-        if any(w in text_lower for w in ['smell', 'stench', 'disease', 'days']):
+        if any(w in text_lower or w in full_text for w in ['smell', 'stench', 'disease', 'days', 'बदबू', 'दुर्गंधी']):
+            priority = "high"
             priority = "high"
 
     # Location & Duration Extraction

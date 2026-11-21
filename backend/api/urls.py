@@ -21,5 +21,6 @@ urlpatterns = [
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('user/me/', UserProfileView.as_view({'get': 'me'}), name='user_me'),
+    path('user/staff-list/', UserProfileView.as_view({'get': 'staff_list'}), name='user_staff_list'),
 ]
 

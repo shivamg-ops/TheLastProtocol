@@ -5,12 +5,19 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { api } from "@/lib/api";
-import { Eye, Plus, FileText } from "lucide-react";
+import { Eye, Plus, FileText, Star, CheckCircle } from "lucide-react";
 
 export default function CitizenDashboard() {
   const [complaints, setComplaints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
+  
+  // Feedback submission states
+  const [rating, setRating] = useState(5);
+  const [feedbackNotes, setFeedbackNotes] = useState("");
+  const [satisfaction, setSatisfaction] = useState(true);
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
 
   useEffect(() => {
     fetchComplaints();
@@ -21,9 +28,34 @@ export default function CitizenDashboard() {
     api.get("/complaints/")
       .then((res) => {
         setComplaints(res.data);
+        if (selectedComplaint) {
+          const updated = res.data.find((c: any) => c.id === selectedComplaint.id);
+          if (updated) setSelectedComplaint(updated);
+        }
       })
       .catch((err) => console.log(err))
       .finally(() => setLoading(false));
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComplaint) return;
+    setSubmittingFeedback(true);
+    setFeedbackMsg("");
+
+    try {
+      await api.post(`/complaints/${selectedComplaint.id}/submit_feedback/`, {
+        rating: rating,
+        feedback_text: feedbackNotes,
+        resolution_satisfaction: satisfaction,
+      });
+      setFeedbackMsg("Feedback submitted successfully! Thank you for verifying resolution.");
+      fetchComplaints();
+    } catch (err: any) {
+      setFeedbackMsg(err.response?.data?.error || "Failed to submit feedback.");
+    } finally {
+      setSubmittingFeedback(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -193,6 +225,120 @@ export default function CitizenDashboard() {
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <span className="font-bold text-green-900 block mb-1">Resolution Note by Staff:</span>
                     <p className="text-green-800">{selectedComplaint.resolution_notes}</p>
+                  </div>
+                )}
+
+                {/* Evidence Section */}
+                {selectedComplaint.evidences && selectedComplaint.evidences.length > 0 && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <h4 className="font-bold text-gray-700 mb-2">Complaint & Resolution Evidence</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedComplaint.evidences.map((ev: any) => (
+                        <div key={ev.id} className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                          {ev.file_type === "image" && (
+                            <img
+                              src={ev.file.startsWith("http") ? ev.file : `http://127.0.0.1:8000${ev.file}`}
+                              alt="Evidence"
+                              className="w-full h-24 object-cover"
+                            />
+                          )}
+                          <div className="p-1.5 text-[10px]">
+                            <span className="font-semibold text-gray-800 block truncate">
+                              {ev.is_resolution_proof ? "Resolution Proof" : "Reported Evidence"}
+                            </span>
+                            <span className="text-gray-400">By {ev.uploaded_by_name || "User"}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Citizen Resolution Feedback Section */}
+                {(selectedComplaint.status === "resolved" || selectedComplaint.status === "verified") && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <h4 className="font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Resolution Verification & Rating
+                    </h4>
+
+                    {selectedComplaint.feedback ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
+                        <div className="flex items-center gap-1 mb-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-3.5 h-3.5 ${
+                                star <= selectedComplaint.feedback.rating
+                                  ? "text-amber-500 fill-amber-500"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          ))}
+                          <span className="font-bold text-xs ml-1">
+                            {selectedComplaint.feedback.rating}/5 Stars
+                          </span>
+                        </div>
+                        {selectedComplaint.feedback.feedback_text && (
+                          <p className="text-[11px] text-gray-700 mt-1 italic">
+                            &ldquo;{selectedComplaint.feedback.feedback_text}&rdquo;
+                          </p>
+                        )}
+                        <span className="text-[10px] text-emerald-700 font-semibold mt-1 block">
+                          Verified & Confirmed by Citizen
+                        </span>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleFeedbackSubmit} className="space-y-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        {feedbackMsg && (
+                          <div className="p-2 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-800">
+                            {feedbackMsg}
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">Rate Resolution Quality</label>
+                          <div className="flex items-center gap-2">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => setRating(s)}
+                                className="p-1 focus:outline-none"
+                              >
+                                <Star
+                                  className={`w-5 h-5 ${
+                                    s <= rating
+                                      ? "text-amber-500 fill-amber-500"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              </button>
+                            ))}
+                            <span className="text-xs font-bold text-gray-700 ml-1">{rating} Stars</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">Feedback Comments (Optional)</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Was the issue resolved satisfactorily? e.g. 'Pothole filled and road leveled nicely.'"
+                            value={feedbackNotes}
+                            onChange={(e) => setFeedbackNotes(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={submittingFeedback}
+                          className="w-full py-2 bg-[#25845B] hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow transition flex items-center justify-center gap-1.5"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {submittingFeedback ? "Submitting..." : "Confirm & Submit Rating"}
+                        </button>
+                      </form>
+                    )}
                   </div>
                 )}
 

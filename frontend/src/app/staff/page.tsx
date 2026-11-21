@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { api } from "@/lib/api";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Camera, Upload, AlertCircle } from "lucide-react";
 
 export default function StaffPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -13,6 +13,9 @@ export default function StaffPage() {
   const [statusVal, setStatusVal] = useState("in_progress");
   const [notesVal, setNotesVal] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState("");
 
   useEffect(() => {
     loadStaffTasks();
@@ -31,16 +34,36 @@ export default function StaffPage() {
     if (!activeTask) return;
 
     setSubmitting(true);
+    setStatusMsg("");
     try {
+      // 1. If proof file is selected, upload to /evidence/ with is_resolution_proof=true
+      if (proofFile) {
+        const formData = new FormData();
+        formData.append("complaint", activeTask.id);
+        formData.append("file", proofFile);
+        formData.append("file_type", "image");
+        formData.append("is_resolution_proof", "true");
+
+        await api.post("/evidence/", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      }
+
+      // 2. Update complaint status
       await api.post(`/complaints/${activeTask.id}/update_status/`, {
         status: statusVal,
         notes: notesVal,
       });
+
       setActiveTask(null);
       setNotesVal("");
+      setProofFile(null);
+      setProofPreview(null);
       loadStaffTasks();
     } catch (err: any) {
-      alert(err.response?.data?.error || "Failed to update task status.");
+      setStatusMsg(err.response?.data?.error || "Failed to update task status.");
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +150,7 @@ export default function StaffPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Field Notes / Work Summary</label>
                   <textarea
-                    rows={4}
+                    rows={3}
                     required
                     placeholder="Describe actions taken (e.g., cleared 2 tons of debris, repaired broken pipeline segment)..."
                     value={notesVal}
@@ -136,13 +159,43 @@ export default function StaffPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Upload Resolution Proof (Photo)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const f = e.target.files[0];
+                        setProofFile(f);
+                        setProofPreview(URL.createObjectURL(f));
+                      }
+                    }}
+                    className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+                  />
+                  {proofPreview && (
+                    <div className="mt-2 flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                      <img src={proofPreview} alt="Proof" className="w-10 h-10 object-cover rounded" />
+                      <span className="text-[11px] text-gray-600 truncate">{proofFile?.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {statusMsg && (
+                  <div className="p-2.5 bg-red-50 border border-red-200 text-xs text-red-700 rounded-lg">
+                    {statusMsg}
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={submitting}
                   className="w-full py-2 bg-[#25845B] hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow transition flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  {submitting ? "Updating..." : "Commit Status & Notify Citizen"}
+                  {submitting ? "Updating & Uploading..." : "Commit Status & Notify Citizen"}
                 </button>
               </form>
             ) : (

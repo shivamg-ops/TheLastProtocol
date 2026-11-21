@@ -9,8 +9,12 @@ export default function AdminPage() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [complaints, setComplaints] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [staffMembers, setStaffMembers] = useState<any[]>([]);
   const [assigningComplaint, setAssigningComplaint] = useState<any>(null);
   const [staffId, setStaffId] = useState("");
+  const [assignError, setAssignError] = useState("");
+  const [assignSuccess, setAssignSuccess] = useState("");
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -18,14 +22,19 @@ export default function AdminPage() {
 
   const loadData = async () => {
     try {
-      const [resAnalytics, resComplaints, resDepts] = await Promise.all([
+      const [resAnalytics, resComplaints, resDepts, resStaff] = await Promise.all([
         api.get("/analytics/summary/"),
         api.get("/complaints/"),
         api.get("/departments/"),
+        api.get("/user/staff-list/"),
       ]);
       setAnalytics(resAnalytics.data);
       setComplaints(resComplaints.data);
       setDepartments(resDepts.data);
+      setStaffMembers(resStaff.data);
+      if (resStaff.data.length > 0 && !staffId) {
+        setStaffId(String(resStaff.data[0].id));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -35,14 +44,25 @@ export default function AdminPage() {
     e.preventDefault();
     if (!assigningComplaint || !staffId) return;
 
+    setAssignError("");
+    setAssignSuccess("");
+    setAssigning(true);
+
     try {
       await api.post(`/complaints/${assigningComplaint.id}/assign_staff/`, {
-        staff_id: staffId,
+        staff_id: parseInt(staffId, 10),
       });
-      setAssigningComplaint(null);
+      setAssignSuccess(`Ticket ${assigningComplaint.tracking_id} successfully assigned to field staff.`);
+      setTimeout(() => {
+        setAssigningComplaint(null);
+        setAssignSuccess("");
+      }, 1200);
       loadData();
-    } catch (err) {
-      alert("Error assigning staff. Ensure user ID exists.");
+    } catch (err: any) {
+      const msg = err.response?.data?.error || "Error assigning staff. Ensure staff user exists.";
+      setAssignError(msg);
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -193,37 +213,63 @@ export default function AdminPage() {
                 Ticket: <strong>{assigningComplaint.tracking_id}</strong> — {assigningComplaint.title}
               </p>
 
+              {assignError && (
+                <div className="mt-3 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                  {assignError}
+                </div>
+              )}
+
+              {assignSuccess && (
+                <div className="mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                  {assignSuccess}
+                </div>
+              )}
+
               <form onSubmit={handleAssignStaff} className="mt-4 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Staff User ID (e.g. 2 for demo staff1)
+                    Select Field Staff Member
                   </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="Enter Staff User ID (e.g. 2)"
-                    value={staffId}
-                    onChange={(e) => setStaffId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37]"
-                  />
+                  {staffMembers.length > 0 ? (
+                    <select
+                      value={staffId}
+                      onChange={(e) => setStaffId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#A94D37] bg-white"
+                    >
+                      {staffMembers.map((staff) => (
+                        <option key={staff.id} value={staff.id}>
+                          {staff.first_name ? `${staff.first_name} ${staff.last_name} (${staff.username})` : staff.username} • {staff.organization_name || "Municipal Field Unit"}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500">
+                      No field staff accounts found in directory.
+                    </div>
+                  )}
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Demo staff user <code>staff1</code> has ID: 2
+                    Only verified municipal field officers and active staff are available for assignment.
                   </p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
                   <button
                     type="button"
-                    onClick={() => setAssigningComplaint(null)}
+                    onClick={() => {
+                      setAssigningComplaint(null);
+                      setAssignError("");
+                      setAssignSuccess("");
+                    }}
                     className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-xs font-semibold bg-[#A94D37] text-white rounded-lg shadow hover:bg-[#8e3e2b]"
+                    disabled={assigning || staffMembers.length === 0}
+                    className="px-4 py-2 text-xs font-semibold bg-[#A94D37] text-white rounded-lg shadow hover:bg-[#8e3e2b] disabled:opacity-50"
                   >
-                    Confirm Assignment
+                    {assigning ? "Assigning..." : "Confirm Assignment"}
                   </button>
                 </div>
               </form>

@@ -40,6 +40,8 @@ export default function InteractiveChatReportPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [attachedEvidenceFile, setAttachedEvidenceFile] = useState<File | null>(null);
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
 
   // Active AI Diagnostic state & Editable Draft
   const [currentDiagnosis, setCurrentDiagnosis] = useState<any>(null);
@@ -54,6 +56,7 @@ export default function InteractiveChatReportPage() {
   const [draftWard, setDraftWard] = useState("");
   const [draftDuration, setDraftDuration] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [evidenceStatus, setEvidenceStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [successTicket, setSuccessTicket] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -97,8 +100,10 @@ export default function InteractiveChatReportPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedImage(file);
+      setAttachedEvidenceFile(file);
       const url = URL.createObjectURL(file);
       setImagePreviewUrl(url);
+      setEvidencePreview(url);
     }
   };
 
@@ -300,6 +305,7 @@ export default function InteractiveChatReportPage() {
     }
 
     setSubmitting(true);
+    setEvidenceStatus("idle");
     try {
       const payload = {
         title: draftTitle,
@@ -314,7 +320,30 @@ export default function InteractiveChatReportPage() {
       };
 
       const res = await api.post("/complaints/", payload);
-      setSuccessTicket(res.data.tracking_id);
+      const createdComplaint = res.data;
+
+      // Upload evidence file if attached
+      if (attachedEvidenceFile && createdComplaint?.id) {
+        setEvidenceStatus("uploading");
+        try {
+          const formData = new FormData();
+          formData.append("complaint", createdComplaint.id);
+          formData.append("file", attachedEvidenceFile);
+          formData.append("file_type", "image");
+
+          await api.post("/evidence/", formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          });
+          setEvidenceStatus("success");
+        } catch (uploadErr) {
+          console.error("Evidence upload failed:", uploadErr);
+          setEvidenceStatus("error");
+        }
+      }
+
+      setSuccessTicket(createdComplaint.tracking_id);
     } catch (err) {
       console.error(err);
       alert("Failed to submit complaint. Ensure backend is running and you are logged in.");
@@ -365,6 +394,20 @@ export default function InteractiveChatReportPage() {
             <div className="my-4 inline-block bg-gray-100 border border-gray-300 px-6 py-2.5 rounded-lg text-lg font-mono font-bold text-[#A94D37]">
               {successTicket}
             </div>
+
+            {evidenceStatus === "success" && (
+              <div className="mb-4 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#25845B]" />
+                <span>Photo evidence securely uploaded and linked to ticket.</span>
+              </div>
+            )}
+
+            {evidenceStatus === "error" && (
+              <div className="mb-4 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>Complaint registered, but photo evidence upload encountered a network issue.</span>
+              </div>
+            )}
             <p className="text-xs text-gray-500 max-w-md mx-auto mb-6">
               The ticket is assigned to the respective department with SLA tracking. You can monitor live field updates in your Citizen Portal.
             </p>
@@ -675,12 +718,34 @@ export default function InteractiveChatReportPage() {
                       </div>
                     </div>
 
+                    {evidencePreview && (
+                      <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <img src={evidencePreview} alt="Attached" className="w-9 h-9 rounded object-cover border border-gray-300" />
+                          <div>
+                            <span className="text-[11px] font-semibold text-gray-800 block">Photo Evidence Attached</span>
+                            <span className="text-[10px] text-gray-500">Will be uploaded with ticket</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAttachedEvidenceFile(null);
+                            setEvidencePreview(null);
+                          }}
+                          className="text-[10px] text-red-600 font-bold hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+
                     <button
                       type="submit"
                       disabled={submitting}
                       className="w-full py-2.5 bg-[#A94D37] hover:bg-[#8e3e2b] text-white font-medium text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 mt-2"
                     >
-                      {submitting ? "Submitting Ticket..." : "Confirm & Submit Complaint"} <ArrowRight className="w-3.5 h-3.5" />
+                      {submitting ? "Submitting Ticket & Uploading Evidence..." : "Confirm & Submit Complaint"} <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </form>
                 </div>
