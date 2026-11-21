@@ -17,6 +17,14 @@ JanSahayak AI empowers citizens to report civic grievances through speech, multi
 ## 🏗️ Architecture & Modules
 
 ### End-to-End System Flowchart
+
+<p align="center">
+  <img src="docs/flowchart.png" alt="JanSahayak AI Architecture Flowchart" width="850"/>
+</p>
+
+<details>
+<summary><b>Click to view Mermaid Diagram Source Code</b></summary>
+
 ```mermaid
 flowchart TD
     A["Citizen opens JanSahayak"] --> B["Login / Register"]
@@ -44,6 +52,8 @@ flowchart TD
     S --> T["Update Status"]
     T --> R
 ```
+
+</details>
 
 ### 1. Backend (`/backend`)
 - **Framework**: Python Django, Django REST Framework, SimpleJWT
