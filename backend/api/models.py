@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from .validators import validate_evidence_file
 
 class UserRole(models.TextChoices):
     CITIZEN = 'citizen', 'Individual Citizen'
@@ -118,7 +119,7 @@ class Complaint(models.Model):
 
 class ComplaintEvidence(models.Model):
     complaint = models.ForeignKey(Complaint, on_delete=models.CASCADE, related_name='evidences')
-    file = models.FileField(upload_to='complaint_evidence/')
+    file = models.FileField(upload_to='complaint_evidence/', validators=[validate_evidence_file])
     file_type = models.CharField(max_length=20, choices=[('image', 'Image'), ('video', 'Video'), ('audio', 'Audio'), ('document', 'Document')])
     ai_analysis_description = models.TextField(blank=True, null=True)
     is_resolution_proof = models.BooleanField(default=False)
